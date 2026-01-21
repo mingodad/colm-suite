@@ -86,6 +86,7 @@ bool exportCode = false;
 bool hostAdapters = true;
 
 bool generateGraphviz = false;
+bool generateEbnf = false;
 bool verbose = false;
 bool logging = false;
 bool branchPointInfo = false;
@@ -212,6 +213,7 @@ void usage()
 "   -r                   run output program and replace process\n"
 "   -c                   compile only (don't produce binary)\n"
 "   -V                   print dot format (graphiz)\n"
+"   -G                   print EBNF grammar (for railroad diagram generators)\n"
 "   -d                   print verbose debug information\n"
 "   -B <path>\n"
 "       Run Colm from the build directory. Use this when building from source\n"
@@ -508,7 +510,7 @@ void compileOutput()
 
 void processArgs( int argc, const char **argv )
 {
-	ParamCheck pc( "p:cD:e:x:I:L:vdliro:S:M:vHh?-:sVa:m:b:E:B:", argc, argv );
+	ParamCheck pc( "p:cD:e:x:I:L:vdliro:S:M:vHh?-:sVa:m:b:E:B:G", argc, argv );
 
 	while ( pc.check() ) {
 		switch ( pc.state ) {
@@ -570,6 +572,9 @@ void processArgs( int argc, const char **argv )
 				break;
 			case 'V':
 				generateGraphviz = true;
+				break;
+			case 'G':
+				generateEbnf = true;
 				break;
 			case '-':
 				if ( strcasecmp(pc.parameterArg, "help") == 0 ) {
@@ -748,6 +753,10 @@ int main(int argc, const char **argv)
 	if ( generateGraphviz ) {
 		outStream = &cout;
 		pd->writeDotFile();
+	}
+	else if ( generateEbnf ) {
+		outStream = &cout;
+		pd->writeEbnf();
 	}
 	else {
 		if ( gblLibrary )
