@@ -31,3 +31,4 @@
 
 colm-suite-*.tar.{gz,bz2}
 colm-suite-*
+_codeql_detected_source_root

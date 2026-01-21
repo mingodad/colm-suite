@@ -877,6 +877,11 @@ struct Compiler
 	void writeTransList( PdaState *state );
 	void writeDotFile( PdaGraph *graph );
 	void writeDotFile( );
+
+	/*
+	 * EBNF Generation
+	 */
+	void writeEbnf();
 	
 
 	/*
