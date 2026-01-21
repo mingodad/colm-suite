@@ -22,6 +22,7 @@
 
 #include <iostream>
 #include <sstream>
+#include <iomanip>
 
 #include "compiler.h"
 #include "ebnfgen.h"
@@ -46,7 +47,7 @@ static string escapeString( const string &str )
 					escaped << c;
 				else {
 					/* Print as hex escape */
-					escaped << "\\x" << hex << (int)c << dec;
+					escaped << "\\x" << std::hex << std::setfill('0') << std::setw(2) << (int)c << std::dec;
 				}
 				break;
 		}
