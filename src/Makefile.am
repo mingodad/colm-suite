@@ -58,7 +58,7 @@ common_CFLAGS = \
 	-DABS_BUILDDIR='"$(abs_builddir)"'
 
 libprog_a_SOURCES = \
-	buffer.h bytecode.h colm.h debug.h dotgen.h fsmcodegen.h fsmgraph.h \
+	buffer.h bytecode.h colm.h debug.h dotgen.h ebnfgen.h fsmcodegen.h fsmgraph.h \
 	input.h keyops.h map.h compiler.h \
 	parsetree.h pcheck.h pdacodegen.h pdagraph.h pdarun.h pool.h redbuild.h \
 	redfsm.h tree.h version.h global.h colm.h parser.h cstring.h \
@@ -68,7 +68,7 @@ libprog_a_SOURCES = \
 	fsmstate.cc fsmbase.cc fsmattach.cc fsmmin.cc \
 	fsmgraph.cc pdagraph.cc pdabuild.cc pdacodegen.cc fsmcodegen.cc \
 	redfsm.cc fsmexec.cc redbuild.cc closure.cc fsmap.cc \
-	dotgen.cc pcheck.cc ctinput.cc declare.cc codegen.cc \
+	dotgen.cc ebnfgen.cc pcheck.cc ctinput.cc declare.cc codegen.cc \
 	exports.cc compiler.cc parser.cc reduce.cc
 
 libprog_a_CXXFLAGS = $(common_CFLAGS)
