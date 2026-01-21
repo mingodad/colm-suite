@@ -53,7 +53,7 @@ set_target_properties(libcolm PROPERTIES
 # libprog
 
 add_library(libprog
-	buffer.h bytecode.h colm.h debug.h dotgen.h fsmcodegen.h fsmgraph.h
+	buffer.h bytecode.h colm.h debug.h dotgen.h ebnfgen.h fsmcodegen.h fsmgraph.h
 	input.h keyops.h map.h compiler.h
 	parsetree.h pcheck.h pdacodegen.h pdagraph.h pdarun.h pool.h redbuild.h
 	redfsm.h tree.h global.h colm.h parser.h cstring.h
@@ -62,7 +62,7 @@ add_library(libprog
 	fsmstate.cc fsmbase.cc fsmattach.cc fsmmin.cc
 	fsmgraph.cc pdagraph.cc pdabuild.cc pdacodegen.cc fsmcodegen.cc
 	redfsm.cc fsmexec.cc redbuild.cc closure.cc fsmap.cc
-	dotgen.cc pcheck.cc ctinput.cc declare.cc codegen.cc
+	dotgen.cc ebnfgen.cc pcheck.cc ctinput.cc declare.cc codegen.cc
 	exports.cc compiler.cc parser.cc reduce.cc)
 
 target_include_directories(libprog
