@@ -20,9 +20,7 @@
  * SOFTWARE.
  */
 
-#include <stdbool.h>
 #include <iostream>
-#include <sstream>
 
 #include "compiler.h"
 
