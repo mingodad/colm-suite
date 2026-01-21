@@ -46,8 +46,10 @@ static string escapeString( const string &str )
 				if ( c >= 32 && c <= 126 )
 					escaped << c;
 				else {
-					/* Print as hex escape */
-					escaped << "\\x" << std::hex << std::setfill('0') << std::setw(2) << (int)c << std::dec;
+					/* Print as hex escape - use a temp stream to avoid affecting main stream state */
+					std::ostringstream hexStream;
+					hexStream << std::hex << std::setfill('0') << std::setw(2) << (int)c;
+					escaped << "\\x" << hexStream.str();
 				}
 				break;
 		}
@@ -119,9 +121,14 @@ string reOrItemToPattern( ReOrItem *orItem )
 		return escapeString( orItem->data.data );
 	}
 	else if ( orItem->type == ReOrItem::Range ) {
-		ostringstream result;
-		result << (char)orItem->lower << "-" << (char)orItem->upper;
-		return result.str();
+		/* Create strings for lower and upper bounds and escape them */
+		string lowerStr;
+		string upperStr;
+		
+		lowerStr.push_back((char)orItem->lower);
+		upperStr.push_back((char)orItem->upper);
+		
+		return escapeString(lowerStr) + "-" + escapeString(upperStr);
 	}
 	
 	return "";
