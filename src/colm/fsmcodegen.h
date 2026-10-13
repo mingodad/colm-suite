@@ -89,6 +89,8 @@ struct FsmCodeGen
 	void writeCode();
 	void writeMain( long activeRealm );
 
+	void writeDebugFsm( ostream &out );
+
 protected:
 	LexReducer *reducer;
 	fsm_tables *fsmTables;
@@ -165,6 +167,13 @@ protected:
 	void CURS( ostream &ret, bool inFinish ) { assert( false ); }
 	void TARGS( ostream &ret, bool inFinish, int targState ) { assert( false ); }
 	void NFA_POP() { assert( false ); }
+
+	string formatChar( Key key );
+	string formatClassChar( int c );
+	string formatKey( Key key );
+	string formatAction( const RedAction *action );
+	string formatTransition( const RedTransAp *trans );
+	string formatRange( Key low, Key high );
 };
 
 #endif /* _COLM_FSMCODEGEN_H */

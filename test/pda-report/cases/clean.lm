@@ -1,0 +1,12 @@
+lex
+	literal `n
+	ignore / [ \t\n\r]+ /
+end
+
+def start
+	[ exp ]
+
+def exp
+	[ `n ]
+
+parse C: start[stdin]

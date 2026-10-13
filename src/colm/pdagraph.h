@@ -186,6 +186,14 @@ struct CmpProdIdPair
 
 typedef BstSet< ProdIdPair, CmpProdIdPair > ProdIdPairSet;
 
+/* How a raw conflict was disposed of by precedence resolution. These are
+ * report-only annotations; they do not affect parsing. */
+enum PdaResolveFlag {
+	PdaResLevel    = 1,  /* decided by precedence level */
+	PdaResAssoc    = 2,  /* decided by associativity */
+	PdaResNonassoc = 4   /* nonassoc -> error (both actions removed) */
+};
+
 /* Transition class that implements actions and priorities. */
 struct PdaTrans 
 {
@@ -196,7 +204,10 @@ struct PdaTrans
 		isShiftReduce(false),
 		shiftPrior(0),
 		noPreIgnore(false),
-		noPostIgnore(false)
+		noPostIgnore(false),
+		conflictRawKind(0),
+		conflictResolve(0),
+		conflictRec(-1)
 	{ }
 
 	PdaTrans( const PdaTrans &other ) :
@@ -208,7 +219,10 @@ struct PdaTrans
 		reductions(other.reductions),
 		commits(other.commits),
 		noPreIgnore(false),
-		noPostIgnore(false)
+		noPostIgnore(false),
+		conflictRawKind(0),
+		conflictResolve(0),
+		conflictRec(-1)
 	{ }
 
 	long lowKey;
@@ -240,6 +254,14 @@ struct PdaTrans
 
 	bool noPreIgnore;
 	bool noPostIgnore;
+
+	/* Conflict report annotations. conflictRawKind is the conflict class
+	 * (1 shift/reduce, 2 reduce/reduce) as it stood before precedence
+	 * resolution; conflictResolve is a PdaResolveFlag bitset set while
+	 * resolving; conflictRec indexes the snapshot record, or -1. */
+	int conflictRawKind;
+	int conflictResolve;
+	long conflictRec;
 };
 
 /* In transition list. Like DList except only has head pointers, which is all

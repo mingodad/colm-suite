@@ -688,40 +688,38 @@ struct TokenRegion
 
 struct RegionSet
 {
-	RegionSet( int id, const InputLoc &loc,
-			RegionImpl *implTokenIgnore, RegionImpl *implTokenOnly,
-			RegionImpl *implIgnoreOnly, TokenRegion *tokenIgnore,
-			TokenRegion *tokenOnly, TokenRegion *ignoreOnly,
-			TokenRegion *collectIgnore )
-	:
-		id(id),
-		loc(loc),
-		implTokenIgnore(implTokenIgnore),
-		implTokenOnly(implTokenOnly),
-		implIgnoreOnly(implIgnoreOnly),
+    RegionSet( int id, const InputLoc &loc,
+            RegionImpl *implTokenIgnore, RegionImpl *implTokenOnly,
+            RegionImpl *implIgnoreOnly, TokenRegion *tokenIgnore,
+            TokenRegion *tokenOnly, TokenRegion *ignoreOnly,
+            TokenRegion *collectIgnore )
+    :
+        id(id),
+        loc(loc),
+        implTokenIgnore(implTokenIgnore),
+        implTokenOnly(implTokenOnly),
+        implIgnoreOnly(implIgnoreOnly),
+        tokenIgnore(tokenIgnore),
+        tokenOnly(tokenOnly),
+        ignoreOnly(ignoreOnly),
+        collectIgnore(collectIgnore)
+    {}
 
-		tokenIgnore(tokenIgnore),
-		tokenOnly(tokenOnly),
-		ignoreOnly(ignoreOnly),
-		collectIgnore(collectIgnore)
-	{}
+    int id;
+    InputLoc loc;
 
-	int id;
-	InputLoc loc;
+    RegionImpl *implTokenIgnore;
+    RegionImpl *implTokenOnly;
+    RegionImpl *implIgnoreOnly;
 
-	/* Provides the scanner state machines. We reuse ignore-only. */
-	RegionImpl *implTokenIgnore;
-	RegionImpl *implTokenOnly;
-	RegionImpl *implIgnoreOnly;
+    TokenRegion *tokenIgnore;
+    TokenRegion *tokenOnly;
+    TokenRegion *ignoreOnly;
+    TokenRegion *collectIgnore;
 
-	TokenRegion *tokenIgnore;
-	TokenRegion *tokenOnly;
-	TokenRegion *ignoreOnly;
-	TokenRegion *collectIgnore;
+    TokenDefListReg tokenDefList;
 
-	TokenDefListReg tokenDefList;
-
-	RegionSet *next, *prev;
+    RegionSet *next, *prev;
 };
 
 typedef Vector<RegionSet*> RegionSetVect;

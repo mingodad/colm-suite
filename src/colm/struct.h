@@ -124,6 +124,9 @@ void colm_struct_add( struct colm_program *prg, struct colm_struct *item );
 void colm_struct_delete( struct colm_program *prg, struct colm_tree **sp,
 		struct colm_struct *el );
 
+struct colm_struct *colm_struct_inbuilt( struct colm_program *prg, int size,
+		colm_destructor_t destructor );
+
 #define colm_struct_get_field( obj, type, field ) \
 	(type)(((void**)(((struct colm_struct*)obj)+1))[field])
 

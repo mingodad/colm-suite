@@ -38,7 +38,7 @@ void LoadInit::walkProdElList( String defName, ProdElList *list, prod_el_list &p
 		prod_el_list RightProdElList = prodElList.ProdElList();
 		walkProdElList( defName, list, RightProdElList );
 	}
-	
+
 	if ( prodElList.ProdEl() != 0 ) {
 		prod_el El = prodElList.ProdEl();
 		String typeName = El.Id().text().c_str();
@@ -223,12 +223,12 @@ void LoadInit::walkTokenList( token_list &tokenList )
 		token_list RightTokenList = tokenList.TokenList();
 		walkTokenList( RightTokenList );
 	}
-	
+
 	if ( tokenList.TokenDef() != 0 ) {
 		token_def tokenDef = tokenList.TokenDef();
 		String name = tokenDef.Id().text().c_str();
 
-		ObjectDef *objectDef = ObjectDef::cons( ObjectDef::UserType, name, pd->nextObjectId++ ); 
+		ObjectDef *objectDef = ObjectDef::cons( ObjectDef::UserType, name, pd->nextObjectId++ );
 
 		lex_expr LexExpr = tokenDef.Expr();
 		LexExpression *expr = walkLexExpr( LexExpr );
@@ -243,7 +243,7 @@ void LoadInit::walkTokenList( token_list &tokenList )
 	if ( tokenList.IgnoreDef() != 0 ) {
 		ignore_def IgnoreDef = tokenList.IgnoreDef();
 
-		ObjectDef *objectDef = ObjectDef::cons( ObjectDef::UserType, String(), pd->nextObjectId++ ); 
+		ObjectDef *objectDef = ObjectDef::cons( ObjectDef::UserType, String(), pd->nextObjectId++ );
 
 		lex_expr LexExpr = IgnoreDef.Expr();
 		LexExpression *expr = walkLexExpr( LexExpr );
@@ -274,7 +274,7 @@ void LoadInit::walkDefinition( item &define )
 
 	NtDef *ntDef = NtDef::cons( name, curNspace(), curStruct(), false );
 	ObjectDef *objectDef = ObjectDef::cons( ObjectDef::UserType, name,
-			pd->nextObjectId++ ); 
+			pd->nextObjectId++ );
 	cflDef( ntDef, objectDef, prodList );
 }
 
@@ -309,7 +309,7 @@ void LoadInit::consParseStmt( StmtList *stmtList )
 			curLocalFrame()->rootScope, String("A") );
 	LangExpr *Avalue = LangExpr::cons( LangTerm::cons( internal,
 			LangTerm::VarRefType, varRef ) );
-	
+
 	/* Call open. */
 	LangVarRef *openRef = LangVarRef::cons( internal,
 			curNspace(), 0, curLocalFrame()->rootScope, String("open") );
@@ -381,6 +381,7 @@ void LoadInit::go( long activeRealm )
 
 	colm_program *program = colm_new_program( &colm_object );
 	colm_set_debug( program, 0 );
+	program->dump_lexer = dumpLexer;
 	colm_run_program( program, 2, argv );
 
 	/* Extract the parse tree. */

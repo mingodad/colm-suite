@@ -1,0 +1,22 @@
+# `a -> b` is redundant: `b` is already reachable from `c` through the unit
+# production `c -> b`, so the `a -> c` alternative covers it: D5.
+
+lex
+	literal `x `y
+	ignore / [ \t\n\r]+ /
+end
+
+def start
+	[ a ]
+
+def a
+	[ b ]
+|	[ c ]
+
+def c
+	[ b ]
+
+def b
+	[ `x ]
+
+parse D: start[stdin]

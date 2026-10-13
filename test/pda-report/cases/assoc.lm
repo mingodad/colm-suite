@@ -1,0 +1,17 @@
+# Same-level, left-associative operator: the shift/reduce conflict on `+ is
+# resolved by associativity.
+lex
+	literal `+ `n
+	ignore / [ \t\n\r]+ /
+end
+
+left `+
+
+def start
+	[ exp ]
+
+def exp
+	[ exp `+ exp ]
+  | [ `n ]
+
+parse C: start[stdin]

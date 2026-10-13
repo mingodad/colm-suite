@@ -114,7 +114,13 @@ UniqueType *TypeRef::resolveTypeLiteral( Compiler *pd )
 		nspace = nspace->parentNamespace;
 	}
 
-	error(loc) << "unknown type " << pdaLiteral->data << " in typeof expression" << endp;
+	/* A literal used where a token is expected (a pattern element, a
+	 * production or cons right-hand side, or a precedence token) was not
+	 * declared by any `literal`, `token` or `rl` definition. Say that
+	 * plainly: the old message ("unknown type ... in typeof expression")
+	 * named a type expression the author never wrote. */
+	error(loc) << "unknown token or literal " << pdaLiteral->data <<
+			" (no matching literal, token or rl declaration in scope)" << endp;
 	return 0;
 }
 
@@ -826,6 +832,21 @@ void Compiler::resolveProductionEls()
 		/* First resolve. */
 		for ( ProdElList::Iter prodEl = *prod->prodElList; prodEl.lte(); prodEl++ )
 			resolveProdEl( prodEl );
+
+		/* An explicit %prec TOKEN overrides the inherited precedence. The
+		 * precedence declarations have already been applied (see
+		 * resolvePrecedence()), so the target's predType is available. */
+		if ( prod->prodPrecRef != 0 ) {
+			prod->prodPrecRef->resolveType( this );
+			LangEl *lel = prod->prodPrecRef->uniqueType->langEl;
+
+			if ( lel == 0 || lel->type != LangEl::Term )
+				error( prod->loc ) << "the %prec token must be a terminal" << endp;
+			else if ( lel->predType == PredNone )
+				error( prod->loc ) << "the %prec token has no declared precedence" << endp;
+			else
+				prod->predOf = lel;
+		}
 
 		/* If there is no explicit precdence ... */
 		if ( prod->predOf == 0 )  {

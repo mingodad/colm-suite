@@ -1,0 +1,16 @@
+# nonassoc operator: the shift/reduce conflict becomes a parse error.
+lex
+	literal `< `n
+	ignore / [ \t\n\r]+ /
+end
+
+nonassoc `<
+
+def start
+	[ exp ]
+
+def exp
+	[ exp `< exp ]
+  | [ `n ]
+
+parse C: start[stdin]

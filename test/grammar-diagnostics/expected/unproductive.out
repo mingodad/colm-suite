@@ -1,0 +1,4 @@
+warning: non-terminal 'start' cannot derive any terminal string
+warning: non-terminal 'loop' cannot derive any terminal string
+grammar: 0 unreachable, 2 unproductive, 0 duplicate, 0 subsumed, 0 ebnf-redundant
+conflicts: 0 shift/reduce, 1 reduce/reduce over 1 conflict entries, 0 resolved (0 by level, 0 by assoc, 0 nonassoc->error), 0 level-only ties, 1 remaining (0 shift/reduce, 1 reduce/reduce)

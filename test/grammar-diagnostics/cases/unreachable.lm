@@ -1,0 +1,14 @@
+# `unused` is defined but never referenced from a parse root: D1.
+
+lex
+	literal `n `b
+	ignore / [ \t\n\r]+ /
+end
+
+def start
+	[ `n ]
+
+def unused
+	[ `b ]
+
+parse C: start[stdin]

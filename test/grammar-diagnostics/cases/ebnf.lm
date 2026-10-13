@@ -1,0 +1,19 @@
+# An optional/repeat operator on a non-terminal that can already derive the
+# empty string: D6. `nul?` is exactly `nul`; `nul*` and `nul+` are ambiguous.
+# `solid?` is a legitimate optional and must not be reported.
+
+lex
+	literal `s
+	ignore / [ \t\n\r]+ /
+end
+
+def start
+	[ nul? solid* nul* nul+ solid? ]
+
+def nul
+	[]
+
+def solid
+	[ `s ]
+
+parse E: start[stdin]

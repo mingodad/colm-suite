@@ -22,6 +22,10 @@
 
 #include <stdbool.h>
 #include <iostream>
+#include <sstream>
+#include <map>
+#include <set>
+#include <string.h>
 
 #include "compiler.h"
 
@@ -725,4 +729,357 @@ void Compiler::writeEbnfFile()
 	/* Iterate through all language elements */
 	for ( LelList::Iter lel = langEls; lel.lte(); lel++ )
 		writeEbnfLangEl( lel );
+}
+
+/*
+ * SQL dump of the grammar. Writes SQL text to outStream that can be loaded
+ * into SQLite (sqlite3 grammars.db < dump.sql). Every table is keyed by a
+ * grammar id so several grammars can be stored in one database and compared
+ * or searched with SQL. --dump-sql[=N] selects the grammar id (default 1).
+ */
+
+static void sqlWriteStr( ostream &out, const char *s )
+{
+	if ( s == 0 || *s == 0 ) {
+		out << "NULL";
+		return;
+	}
+
+	out << '\'';
+	for ( const char *p = s; *p != 0; p++ ) {
+		if ( *p == '\'' )
+			out << "''";
+		else
+			out << *p;
+	}
+	out << '\'';
+}
+
+/* The lexical pattern of a token as written in the source. */
+static void sqlWritePattern( ostream &out, LangEl *lel )
+{
+	TokenDef *tok = lel->tokenDef;
+	if ( tok == 0 ) {
+		out << "NULL";
+		return;
+	}
+
+	ostringstream buf;
+
+	if ( tok->isLiteral ) {
+		buf << '\'';
+		escapeEbnfString( buf, tok->literal );
+		buf << '\'';
+	}
+	else if ( tok->join != 0 ) {
+		writeLexJoin( buf, tok->join );
+	}
+
+	if ( buf.str().empty() )
+		out << "NULL";
+	else
+		sqlWriteStr( out, buf.str().c_str() );
+}
+
+void Compiler::writeSqlFile()
+{
+	ostream &out = *outStream;
+
+	/* Tokens declared through a namespace (lex region tokens, literals,
+	 * ignores). Internal filler tokens made for empty scanner regions don't
+	 * go through a namespace and are excluded from the pattern column. */
+	std::set<LangEl*> userTokens;
+	for ( NamespaceList::Iter ns = namespaceList; ns.lte(); ns++ ) {
+		for ( TokenDefListNs::Iter tok = ns->tokenDefList; tok.lte(); tok++ ) {
+			if ( tok->tdLangEl != 0 )
+				userTokens.insert( tok->tdLangEl );
+		}
+	}
+
+	out << "BEGIN;\n\n";
+
+	out << "CREATE TABLE IF NOT EXISTS grammar(\n"
+			"  id INTEGER PRIMARY KEY,\n"
+			"  name TEXT NOT NULL,\n"
+			"  dumped TEXT DEFAULT (datetime('now'))\n"
+			");\n";
+	out << "INSERT INTO grammar(id,name) VALUES(" << dumpSqlGrammarId << ",";
+	sqlWriteStr( out, inputFn != 0 ? inputFn : "grammar" );
+	out << ");\n\n";
+
+	out << "CREATE TABLE IF NOT EXISTS langel(\n"
+			"  grammar_id INTEGER NOT NULL REFERENCES grammar(id),\n"
+			"  id INTEGER NOT NULL,\n"
+			"  name TEXT,\n"
+			"  lit TEXT,\n"
+			"  kind TEXT NOT NULL CHECK(kind IN"
+				" ('terminal','nonterminal','synthetic')),\n"
+			"  is_literal BOOLEAN NOT NULL,\n"
+			"  is_repeat BOOLEAN NOT NULL,\n"
+			"  is_list BOOLEAN NOT NULL,\n"
+			"  is_opt BOOLEAN NOT NULL,\n"
+			"  repeat_of INTEGER,\n"
+			"  pattern TEXT,\n"
+			"  pred_type CHAR CHECK(pred_type IN ('L','R','N','P')),\n"
+			"  pred_value INTEGER,\n"
+			"  is_root BOOLEAN NOT NULL,\n"
+			"  PRIMARY KEY(grammar_id,id)\n"
+			");\n";
+
+	for ( LelList::Iter lel = langEls; lel.lte(); lel++ ) {
+		const char *kind;
+		if ( lel->isRepeat || lel->isList || lel->isOpt )
+			kind = "synthetic";
+		else if ( lel->type == LangEl::NonTerm )
+			kind = "nonterminal";
+		else
+			kind = "terminal";
+
+		out << "INSERT INTO langel VALUES(" << dumpSqlGrammarId
+			<< "," << lel->id << ",";
+		sqlWriteStr( out, lel->name );
+		out << ",";
+		sqlWriteStr( out, lel->lit );
+		out << ",'" << kind << "',"
+			<< ( lel->isLiteral ? 1 : 0 ) << ","
+			<< ( lel->isRepeat ? 1 : 0 ) << ","
+			<< ( lel->isList ? 1 : 0 ) << ","
+			<< ( lel->isOpt ? 1 : 0 ) << ",";
+
+		if ( lel->repeatOf != 0 )
+			out << lel->repeatOf->id;
+		else
+			out << "NULL";
+
+		out << ",";
+		if ( userTokens.count( lel ) != 0 )
+			sqlWritePattern( out, lel );
+		else
+			out << "NULL";
+		out << ",";
+
+		switch ( lel->predType ) {
+		case PredLeft:
+			out << "'L'";
+			break;
+		case PredRight:
+			out << "'R'";
+			break;
+		case PredNonassoc:
+			out << "'N'";
+			break;
+		case PredPrecedence:
+			out << "'P'";
+			break;
+		default:
+			out << "NULL";
+			break;
+		}
+
+		out << ",";
+		if ( lel->predType == PredNone )
+			out << "NULL";
+		else
+			out << lel->predValue;
+
+		out << "," << ( lel == rootLangEl ? 1 : 0 ) << ");\n";
+	}
+
+	out << "\n";
+
+	/* Collect the distinct files productions come from, so productions
+	 * reference a file id instead of repeating the file name. */
+	std::map<std::string,long> fileIds;
+	long nextFileId = 1;
+
+	for ( LelList::Iter lel = langEls; lel.lte(); lel++ ) {
+		for ( LelProdList::Iter prod = lel->prodList;
+				prod.lte(); prod++ )
+		{
+			if ( prod->loc.fileName != 0 && *prod->loc.fileName != 0 &&
+					strcmp( prod->loc.fileName, "-" ) != 0 )
+			{
+				long &id = fileIds[ prod->loc.fileName ];
+				if ( id == 0 )
+					id = nextFileId++;
+			}
+		}
+	}
+
+	out << "CREATE TABLE IF NOT EXISTS file(\n"
+			"  grammar_id INTEGER NOT NULL REFERENCES grammar(id),\n"
+			"  id INTEGER NOT NULL,\n"
+			"  name TEXT NOT NULL,\n"
+			"  PRIMARY KEY(grammar_id,id)\n"
+			");\n";
+
+	for ( std::map<std::string,long>::iterator it = fileIds.begin();
+			it != fileIds.end(); it++ )
+	{
+		out << "INSERT INTO file VALUES(" << dumpSqlGrammarId
+			<< "," << it->second << ",";
+		sqlWriteStr( out, it->first.c_str() );
+		out << ");\n";
+	}
+
+	out << "\n";
+
+	out << "CREATE TABLE IF NOT EXISTS production(\n"
+			"  grammar_id INTEGER NOT NULL,\n"
+			"  prod_id INTEGER NOT NULL,\n"
+			"  prod_num INTEGER NOT NULL,\n"
+			"  lhs_id INTEGER NOT NULL,\n"
+			"  loc_file_id INTEGER,\n"
+			"  loc_line INTEGER,\n"
+			"  PRIMARY KEY(grammar_id,prod_id),\n"
+			"  FOREIGN KEY(grammar_id,lhs_id)"
+				" REFERENCES langel(grammar_id,id),\n"
+			"  FOREIGN KEY(grammar_id,loc_file_id)"
+				" REFERENCES file(grammar_id,id)\n"
+			");\n";
+
+	out << "CREATE TABLE IF NOT EXISTS prod_el(\n"
+			"  grammar_id INTEGER NOT NULL,\n"
+			"  prod_id INTEGER NOT NULL,\n"
+			"  pos INTEGER NOT NULL,\n"
+			"  el_id INTEGER NOT NULL,\n"
+			"  PRIMARY KEY(grammar_id,prod_id,pos),\n"
+			"  FOREIGN KEY(grammar_id,prod_id)"
+				" REFERENCES production(grammar_id,prod_id),\n"
+			"  FOREIGN KEY(grammar_id,el_id)"
+				" REFERENCES langel(grammar_id,id)\n"
+			");\n\n";
+
+	for ( LelList::Iter lel = langEls; lel.lte(); lel++ ) {
+		for ( LelProdList::Iter prod = lel->prodList;
+				prod.lte(); prod++ )
+		{
+			out << "INSERT INTO production VALUES(" << dumpSqlGrammarId
+				<< "," << prod->prodId
+				<< "," << prod->prodNum
+				<< "," << lel->id << ",";
+
+			long fileId = 0;
+			if ( prod->loc.fileName != 0 && *prod->loc.fileName != 0 &&
+					strcmp( prod->loc.fileName, "-" ) != 0 )
+				fileId = fileIds[ prod->loc.fileName ];
+
+			if ( fileId != 0 )
+				out << fileId << "," << prod->loc.line;
+			else
+				out << "NULL,NULL";
+			out << ");\n";
+
+			int pos = 0;
+			for ( ProdEl *el = prod->prodElList->head;
+					el != 0; el = el->next )
+			{
+				if ( el->langEl == 0 )
+					continue;
+
+				out << "INSERT INTO prod_el VALUES("
+					<< dumpSqlGrammarId
+					<< "," << prod->prodId
+					<< "," << pos++
+					<< "," << el->langEl->id << ");\n";
+			}
+		}
+	}
+
+	out << "\n";
+
+	/* Views that render the grammar back as text, in the spirit of the
+	 * grammar_view of the byacc sql dump. Elements generated for
+	 * repeat/list/opt wrappers are folded back into name* / name+ / name?. */
+	out <<
+		"CREATE VIEW IF NOT EXISTS prod_el_view AS\n"
+		"SELECT pe.grammar_id AS grammar_id,\n"
+		"       pe.prod_id AS prod_id,\n"
+		"       pe.pos AS pos,\n"
+		"       CASE WHEN b.kind = 'synthetic'\n"
+		"            THEN CASE WHEN o.is_literal=1"
+						" AND coalesce(o.lit,'')<>''\n"
+		"                      THEN o.lit ELSE o.name END\n"
+		"                 || CASE WHEN b.is_opt THEN '?'"
+						" WHEN b.is_list THEN '+' ELSE '*' END\n"
+		"            ELSE CASE WHEN b.is_literal=1"
+						" AND coalesce(b.lit,'')<>''\n"
+		"                      THEN b.lit ELSE b.name END\n"
+		"       END AS el_text\n"
+		"FROM prod_el AS pe\n"
+		"JOIN langel AS b ON b.grammar_id=pe.grammar_id AND b.id=pe.el_id\n"
+		"LEFT JOIN langel AS o ON o.grammar_id=pe.grammar_id"
+				" AND o.id=b.repeat_of;\n\n"
+
+		"CREATE VIEW IF NOT EXISTS rule_view AS\n"
+		"SELECT r.grammar_id AS grammar_id,\n"
+		"       r.prod_id AS prod_id,\n"
+		"       r.prod_num AS prod_num,\n"
+		"       l.name AS lhs,\n"
+		"       l.kind AS lhs_kind,\n"
+		"       l.is_root AS is_root,\n"
+		"       r.loc_file_id AS loc_file_id,\n"
+		"       coalesce((\n"
+		"         SELECT group_concat(el_text, ' ')\n"
+		"         FROM ( SELECT el_text, pos FROM prod_el_view\n"
+		"                WHERE grammar_id=r.grammar_id"
+						" AND prod_id=r.prod_id\n"
+		"                ORDER BY pos ) ), '/*empty*/') AS rhs\n"
+		"FROM production AS r\n"
+		"JOIN langel AS l ON l.grammar_id=r.grammar_id"
+				" AND l.id=r.lhs_id;\n\n"
+
+		"CREATE VIEW IF NOT EXISTS def_view AS\n"
+		"SELECT grammar_id, lhs,\n"
+		"  'def ' || lhs || ' [' || group_concat(rhs, ' | ') || '];'"
+				" AS def_text\n"
+		"FROM ( SELECT grammar_id, lhs, prod_num, rhs, is_root, lhs_kind\n"
+		"       FROM rule_view ORDER BY grammar_id, lhs, prod_num )\n"
+		"WHERE NOT is_root AND lhs_kind<>'synthetic'\n"
+		"GROUP BY grammar_id, lhs;\n\n"
+
+		"CREATE VIEW IF NOT EXISTS token_view AS\n"
+		"SELECT grammar_id,\n"
+		"  CASE WHEN is_literal=1\n"
+		"       THEN 'literal ' || coalesce(lit, name) || ';'\n"
+		"       ELSE 'lex token ' || name || coalesce(' ' || pattern, '') || ';' END\n"
+		"       AS decl\n"
+		"FROM langel\n"
+		"WHERE pattern IS NOT NULL;\n\n"
+
+		"CREATE VIEW IF NOT EXISTS prec_view AS\n"
+		"SELECT grammar_id,\n"
+		"  CASE pred_type WHEN 'L' THEN 'left' WHEN 'R' THEN 'right'\n"
+		"   WHEN 'N' THEN 'nonassoc' ELSE 'precedence' END\n"
+		"  || ' ' || coalesce(name, lit) AS decl\n"
+		"FROM langel\n"
+		"WHERE pred_type IS NOT NULL;\n\n"
+
+		"CREATE VIEW IF NOT EXISTS start_view AS\n"
+		"/* Best effort: the start symbol is the user nonterminal that is never\n"
+		" * referenced in the right hand side of a user production. The true start\n"
+		" * comes from the parse statement in the program body. */\n"
+		"SELECT DISTINCT r.grammar_id, r.lhs AS start_symbol\n"
+		"FROM rule_view AS r\n"
+		"WHERE NOT r.is_root AND r.loc_file_id IS NOT NULL\n"
+		"  AND r.lhs NOT IN ( SELECT pe.el_text FROM prod_el_view AS pe\n"
+		"                     JOIN production AS p\n"
+		"                       ON p.grammar_id=pe.grammar_id"
+							" AND p.prod_id=pe.prod_id\n"
+		"                     WHERE pe.grammar_id=r.grammar_id"
+							" AND p.loc_file_id IS NOT NULL );\n\n"
+
+		"CREATE VIEW IF NOT EXISTS grammar_view AS\n"
+		"SELECT grammar_id, decl AS line FROM token_view\n"
+		"UNION ALL\n"
+		"SELECT grammar_id, decl FROM prec_view\n"
+		"UNION ALL\n"
+		"SELECT grammar_id, def_text FROM def_view;\n\n"
+
+		"COMMIT;\n"
+		"-- The grammar as text: SELECT line FROM grammar_view"
+				" WHERE grammar_id=1;\n"
+		"-- Load another grammar with --dump-sql=2 into the same db, then\n"
+		"-- compare: SELECT * FROM grammar_view WHERE grammar_id=2\n"
+		"--   EXCEPT SELECT * FROM grammar_view WHERE grammar_id=1;\n";
 }

@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 #include <colm/program.h>
 #include <colm/struct.h>
@@ -73,6 +74,9 @@ static struct struct_el_info *colm_sel_info( program_t *prg, int id )
 
 void colm_struct_delete( program_t *prg, tree_t **sp, struct colm_struct *el )
 {
+	//fprintf( stderr, "DEL id=%d (nlel=%ld fstruct=%ld nstruct=%ld)\n",
+	//	el->id, prg->rtd->num_lang_els, prg->rtd->first_struct_el_id,
+	//	prg->rtd->num_struct_els );fflush(stderr);
 	if ( el->id == prg->rtd->struct_inbuilt_id || el->id == prg->rtd->struct_stream_id ) {
 		colm_destructor_t destructor = ((struct colm_inbuilt*)el)->destructor;
 		if ( destructor != 0 )
@@ -106,9 +110,9 @@ parser_t *colm_parser_new( program_t *prg, struct generic_info *gi, int stop_id,
 	struct pda_run *pda_run = malloc( sizeof(struct pda_run) );
 
 	/* Start off the parsing process. */
-	colm_pda_init( prg, pda_run, prg->rtd->pda_tables, 
+	colm_pda_init( prg, pda_run, prg->rtd->pda_tables,
 			gi->parser_id, stop_id, 0, 0, reducer );
-	
+
 	size_t memsize = sizeof(struct colm_parser);
 	struct colm_parser *parser = (struct colm_parser*) malloc( memsize );
 	memset( parser, 0, memsize );

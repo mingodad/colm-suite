@@ -25,7 +25,7 @@
 
 void FsmCodeGen::writeIncludes()
 {
-	out << 
+	out <<
 		"#include <stdio.h>\n"
 		"#include <stdlib.h>\n"
 		"#include <string.h>\n"
@@ -44,17 +44,55 @@ void FsmCodeGen::writeIncludes()
 
 void FsmCodeGen::writeMain( long activeRealm )
 {
-	out << 
+	out <<
 		"int main( int argc, const char **argv )\n"
 		"{\n"
-		"	struct colm_program *prg;\n"
-		"	int exit_status;\n"
+		"\tstruct colm_program *prg;\n"
+		"\tint exit_status;\n"
+		"\tint i, j;\n"
 		"\n"
-		"	prg = colm_new_program( &" << objectName << " );\n"
-		"	colm_set_debug( prg, " << activeRealm << " );\n"
-		"	colm_run_program( prg, argc, argv );\n"
-		"	exit_status = colm_delete_program( prg );\n"
-		"	return exit_status;\n"
+		"\tprg = colm_new_program( &" << objectName << " );\n"
+		"\n"
+		"\t/* Debug options are consumed here so the program itself does not\n"
+		"\t * see them. Everything else is passed through unchanged. */\n"
+		"\tfor ( i = 1, j = 1; i < argc; i++ ) {\n"
+		"\t\tif ( strcmp( argv[i], \"-h\" ) == 0 ||\n"
+		"\t\t\t\tstrcmp( argv[i], \"-H\" ) == 0 ||\n"
+		"\t\t\t\tstrcmp( argv[i], \"-?\" ) == 0 ||\n"
+		"\t\t\t\tstrcmp( argv[i], \"--help\" ) == 0 ) {\n"
+		"\t\t\tfprintf( stdout,\n"
+		"\t\t\t\t\"usage: %s [options] [args]\\n\"\n"
+		"\t\t\t\t\"general:\\n\"\n"
+		"\t\t\t\t\"   -h, -H, -?, --help   print this usage and exit\\n\"\n"
+		"\t\t\t\t\"   --dump-lexer         trace how input is tokenized\\n\"\n"
+		"\t\t\t\t\"   --dump-parse         trace parser region decisions\\n\"\n"
+		"\t\t\t\t\"   --dump-cst           dump the concrete syntax tree\\n\"\n"
+		"\t\t\t\t\"   --dump-cst=TYPES     dump only the listed node types\\n\"\n"
+		"\t\t\t\t\"                        (comma-separated exact names)\\n\"\n"
+		"\t\t\t\t\"other arguments are passed to the program.\\n\",\n"
+		"\t\t\t\targv[0] );\n"
+		"\t\t\tcolm_delete_program( prg );\n"
+		"\t\t\treturn 0;\n"
+		"\t\t}\n"
+		"\t\telse if ( strcmp( argv[i], \"--dump-lexer\" ) == 0 )\n"
+		"\t\t\tprg->dump_lexer = 1;\n"
+		"\t\telse if ( strcmp( argv[i], \"--dump-parse\" ) == 0 )\n"
+		"\t\t\tprg->dump_parse = 1;\n"
+		"\t\telse if ( strcmp( argv[i], \"--dump-cst\" ) == 0 )\n"
+		"\t\t\tprg->dump_cst = 1;\n"
+		"\t\telse if ( strncmp( argv[i], \"--dump-cst=\", 11 ) == 0 ) {\n"
+		"\t\t\tprg->dump_cst = 1;\n"
+		"\t\t\tprg->dump_cst_filter = argv[i] + 11;\n"
+		"\t\t}\n"
+		"\t\telse\n"
+		"\t\t\targv[j++] = argv[i];\n"
+		"\t}\n"
+		"\targc = j;\n"
+		"\n"
+		"\tcolm_set_debug( prg, " << activeRealm << " );\n"
+		"\tcolm_run_program( prg, argc, argv );\n"
+		"\texit_status = colm_delete_program( prg );\n"
+		"\treturn exit_status;\n"
 		"}\n"
 		"\n";
 

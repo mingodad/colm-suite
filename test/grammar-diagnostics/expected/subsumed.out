@@ -1,0 +1,3 @@
+warning: alternative 'a -> b' is subsumed by 'a -> c' (b is reachable from c through unit productions)
+grammar: 0 unreachable, 0 unproductive, 0 duplicate, 1 subsumed, 0 ebnf-redundant
+conflicts: 0 shift/reduce, 1 reduce/reduce over 1 conflict entries, 0 resolved (0 by level, 0 by assoc, 0 nonassoc->error), 0 level-only ties, 1 remaining (0 shift/reduce, 1 reduce/reduce)

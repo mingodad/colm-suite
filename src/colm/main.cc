@@ -30,13 +30,16 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <sstream>
 
 #include "debug.h"
+#include "global.h"
 #include "pcheck.h"
 #include "version.h"
 #include "compiler.h"
+#include "colm.h"
 
 #if defined(CONS_INIT)
 #include "consinit.h"
@@ -74,9 +77,12 @@ InputLoc internal;
 /* Io globals. */
 istream *inStream = 0;
 ostream *outStream = 0;
+ostream *outLexSmStream = 0;
 const char *inputFn = 0;
+const char *inputFn2 = 0;
 const char *outputFn = 0;
 const char *intermedFn = 0;
+const char *intermedLexDbgFn = 0;
 const char *binaryFn = 0;
 const char *exportHeaderFn = 0;
 const char *exportCodeFn = 0;
@@ -88,10 +94,43 @@ bool hostAdapters = true;
 
 bool generateGraphviz = false;
 bool generateEbnf = false;
+
+/* Parser state report. `--pda-report` dumps states; `--pda-report=conflicts`
+ * prints grouped conflicts (with item detail); `--pda-report=clusters` prints
+ * the grouped conflict index and cross-state shapes only; `--pda-report=json`
+ * prints the same conflicts as JSON. `--pda-report=state=N` and
+ * `--pda-report=token=T` restrict the output. Output defaults to stderr and
+ * can be redirected with `--pda-report-file=FILE`. */
+std::ostream *pdaReportStream = &std::cerr;
+int pdaReportMode = PdaReportOff;
+long pdaReportFilterState = -1;
+const char *pdaReportFilterToken = 0;
+/* Static so its destructor flushes the report at exit (a leaked pointer would
+ * drop the buffered tail). */
+static std::ofstream pdaReportFile;
+
+/* Parse and analyze the grammar only. Skip code generation and the build.
+ * Intended for grammar authoring/debugging. */
+bool syntaxOnly = false;
+/* Always-on static grammar diagnostics; --no-warn-grammar disables them. */
+bool warnGrammar = true;
+bool generatePdaReport = false;
+bool dumpSql = false;
+long dumpSqlGrammarId = 1;
+bool dumpGlobals = false;
+bool dumpLexer = false;
+/* Dump each token region: index, declaration site and tokens. */
+bool dumpRegions = false;
+bool dumpCst = false;
+/* Dump the reduced lexer state machine. Opt-in; default off. */
+bool dumpLexerSm = false;
 bool verbose = false;
 bool logging = false;
 bool branchPointInfo = false;
 bool run = false;
+/* Run the program in-process from the compiler-built runtime data, with no
+ * code generation and no C compilation. */
+bool interpret = false;
 bool addUniqueEmptyProductions = false;
 bool gblLibrary = false;
 long gblActiveRealm = 0;
@@ -168,8 +207,9 @@ ostream &warning( )
 /* Print the opening to a warning in the input, then return the error ostream. */
 ostream &warning( const InputLoc &loc )
 {
-	assert( inputFn != 0 );
-	cerr << "warning: " << inputFn << ":" <<
+	/* Use the location's own file, not the top-level input: productions may
+	 * come from an included grammar file. */
+	cerr << "warning: " << locFileName( loc ) << ":" <<
 			loc.line << ":" << loc.col << ": ";
 	return cerr;
 }
@@ -197,8 +237,7 @@ void usage()
 "general:\n"
 "   -h, -H, -?, --help   print this usage and exit\n"
 "   -v --version         print version information and exit\n"
-"   -b <ident>           use <ident> as name of C object encapsulating\n"
-"                        the program\n"
+"   -b <ident>           use <ident> as name of C object encapulaing the program\n"
 "   -o <file>            if -c given, write C parse object to <file>,\n"
 "                        otherwise write binary to <file>\n"
 "   -p <file>            write C parse object to <file>\n"
@@ -213,19 +252,38 @@ void usage()
 "   -l                   activate logging\n"
 "   -r                   run output program and replace process\n"
 "   -c                   compile only (don't produce binary)\n"
-"   -V                   print dot format (graphviz)\n"
+"   -V                   print dot format (graphiz)\n"
+"   --interpret          directly interpret a colm program\n"
 "   --ebnf               print EBNF for railroad diagram\n"
+"   --dump-lexer.        dump lexer tokens\n"
+"   --dump-regions       dump token regions: index, location and tokens\n"
+"   --dump-cst  .        dump concrete syntax tree\n"
+"   --dump-lexer-sm[=F]  dump reduced lexer state machine (to F, default\n"
+"                        <output>.lex-sm.txt)\n"
+"   --dump-sql[=N]      dump grammar as SQL (grammar id N, default 1)\n"
+"   --dump-globals       print all globals\n"
+"   --pda-report         print parser states\n"
+"   --pda-report=conflicts\n"
+"                        print grouped conflicts with item detail\n"
+"   --pda-report=clusters\n"
+"                        print grouped conflict index and shapes\n"
+"   --pda-report=json    print conflicts as JSON\n"
+"   --pda-report=state=N  restrict output to state N\n"
+"   --pda-report=token=T  restrict output to token T\n"
+"   --pda-report-file=F  write the report to file F (default stderr)\n"
+"   --syntax-only        parse and analyze only; write no output, no build\n"
+"   --no-warn-grammar    disable static grammar diagnostics\n"
 "   -d                   print verbose debug information\n"
 "   -B <path>\n"
 "       Run Colm from the build directory. Use this when building from source\n"
 "       and using the resulting binary without installing it. Colm will attempt\n"
 "       to detect when it is run from the build directory. This flag lets the\n"
-"       user be explicit about it. The detection method is specific to the OS\n"
+"       user be expliclit about it. The detection method is specific to the OS\n"
 "       and can fail. The path given should be the root of the build directory,\n"
 "       eg what would be returned by ABS_TOP_BUILDDIR (directory where src is).\n"
 #if DEBUG
 "   -D <tag>             print more information about <tag>\n"
-"                        (BYTECODE|PARSE|MATCH|COMPILE|POOL|PRINT|INPUT|SCAN)\n"
+"                        (BYTECODE|PARSE|MATCH|COMPILE|POOL|PRINT|INPUT|SCAN\n"
 #endif
 	;
 }
@@ -303,6 +361,9 @@ void openOutputCompiled()
 	if ( intermedFn == 0 )
 		intermedFn = fileNameFromStem( binaryFn, ".c" );
 
+	if ( dumpLexerSm && intermedLexDbgFn == 0 )
+		intermedLexDbgFn = fileNameFromStem( binaryFn, ".lex-sm.txt" );
+
 	if ( binaryFn != 0 && inputFn != 0 &&
 			strcmp( inputFn, binaryFn  ) == 0 )
 	{
@@ -331,6 +392,17 @@ void openOutputCompiled()
 	else {
 		/* Writing out ot std out. */
 		outStream = &cout;
+	}
+	if ( intermedLexDbgFn != 0 ) {
+		/* Open the output stream, attaching it to the filter. */
+		ofstream *outFStream = new ofstream( intermedLexDbgFn );
+
+		if ( !outFStream->is_open() ) {
+			error() << "error opening " << intermedLexDbgFn << " for writing" << endl;
+			exit(1);
+		}
+
+		outLexSmStream = outFStream;
 	}
 }
 
@@ -361,6 +433,40 @@ void openOutputLibrary()
 	else {
 		/* Writing out ot std out. */
 		outStream = &cout;
+	}
+
+	if ( dumpLexerSm && intermedLexDbgFn == 0 )
+		intermedLexDbgFn = fileNameFromStem( outputFn, ".lex-sm.txt" );
+
+	if ( intermedLexDbgFn != 0 ) {
+		ofstream *outFStream = new ofstream( intermedLexDbgFn );
+
+		if ( !outFStream->is_open() ) {
+			error() << "error opening " << intermedLexDbgFn << " for writing" << endl;
+			exit(1);
+		}
+
+		outLexSmStream = outFStream;
+	}
+}
+
+/* Open just the lexer state machine dump stream. Used when we are not opening
+ * the compiled or library output at all (--syntax-only), but still want
+ * --dump-lexer-sm to produce its file. */
+void openLexerSmOutput( const char *stem )
+{
+	if ( dumpLexerSm && intermedLexDbgFn == 0 && stem != 0 )
+		intermedLexDbgFn = fileNameFromStem( stem, ".lex-sm.txt" );
+
+	if ( intermedLexDbgFn != 0 ) {
+		ofstream *outFStream = new ofstream( intermedLexDbgFn );
+
+		if ( !outFStream->is_open() ) {
+			error() << "error opening " << intermedLexDbgFn << " for writing" << endl;
+			exit(1);
+		}
+
+		outLexSmStream = outFStream;
 	}
 }
 
@@ -470,7 +576,7 @@ void compileOutput()
 		cflags = "";
 
 	std::ostringstream command;
-	
+
 	if ( fromBuildDir != 0 ) {
 		command << fromBuildDir << "/libtool --tag=CC --mode=link "
 		        << compiler << " -Wall -Wwrite-strings"
@@ -490,7 +596,7 @@ void compileOutput()
 		        << " -L" << LIBDIR
 		        << " -Wl,-rpath," << LIBDIR;
 	}
-	
+
 	for ( ArgsVector::Iter af = additionalCodeFiles; af.lte(); af++ ) {
 		command << " " << *af;
 	}
@@ -587,6 +693,92 @@ void processArgs( int argc, const char **argv )
 					generateEbnf = true;
 					break;
 				}
+				else if ( strcasecmp(pc.parameterArg, "pda-report") == 0 ) {
+					generatePdaReport = true;
+					pdaReportMode = PdaReportFull;
+					break;
+				}
+				else if ( strcasecmp(pc.parameterArg, "pda-report=conflicts") == 0 ) {
+					generatePdaReport = true;
+					pdaReportMode = PdaReportConflicts;
+					break;
+				}
+				else if ( strcasecmp(pc.parameterArg, "pda-report=clusters") == 0 ) {
+					generatePdaReport = true;
+					pdaReportMode = PdaReportClusters;
+					break;
+				}
+				else if ( strcasecmp(pc.parameterArg, "pda-report=json") == 0 ) {
+					generatePdaReport = true;
+					pdaReportMode = PdaReportJson;
+					break;
+				}
+				else if ( strncasecmp(pc.parameterArg, "pda-report=state=", 17) == 0 ) {
+					generatePdaReport = true;
+					pdaReportFilterState = atol( pc.parameterArg + 17 );
+					break;
+				}
+				else if ( strncasecmp(pc.parameterArg, "pda-report=token=", 17) == 0 ) {
+					generatePdaReport = true;
+					pdaReportFilterToken = pc.parameterArg + 17;
+					break;
+				}
+				else if ( strncasecmp(pc.parameterArg, "pda-report-file=", 16) == 0 ) {
+					pdaReportFile.open( pc.parameterArg + 16, std::ios::out | std::ios::trunc );
+					if ( pdaReportFile.is_open() )
+						pdaReportStream = &pdaReportFile;
+					else
+						error() << "failed to open pda report file: "
+								<< ( pc.parameterArg + 16 ) << "\n";
+					generatePdaReport = true;
+					break;
+				}
+				else if ( strcasecmp(pc.parameterArg, "syntax-only") == 0 ) {
+					syntaxOnly = true;
+					break;
+				}
+				else if ( strcasecmp(pc.parameterArg, "interpret") == 0 ) {
+					interpret = true;
+					break;
+				}
+				else if ( strcasecmp(pc.parameterArg, "no-warn-grammar") == 0 ) {
+					warnGrammar = false;
+					break;
+				}
+				else if ( strcasecmp(pc.parameterArg, "dump-globals") == 0 ) {
+					dumpGlobals = true;
+					break;
+				}
+				else if ( strcasecmp(pc.parameterArg, "dump-lexer") == 0 ) {
+					dumpLexer = true;
+					break;
+				}
+				else if ( strcasecmp(pc.parameterArg, "dump-regions") == 0 ) {
+					dumpRegions = true;
+					break;
+				}
+				else if ( strcasecmp(pc.parameterArg, "dump-cst") == 0 ) {
+					dumpCst = true;
+					break;
+				}
+				else if ( strcasecmp(pc.parameterArg, "dump-lexer-sm") == 0 ) {
+					dumpLexerSm = true;
+					break;
+				}
+				else if ( strncasecmp(pc.parameterArg, "dump-lexer-sm=", 14) == 0 ) {
+					dumpLexerSm = true;
+					intermedLexDbgFn = pc.parameterArg + 14;
+					break;
+				}
+				else if ( strcasecmp(pc.parameterArg, "dump-sql") == 0 ) {
+					dumpSql = true;
+					break;
+				}
+				else if ( strncasecmp(pc.parameterArg, "dump-sql=", 9) == 0 ) {
+					dumpSql = true;
+					dumpSqlGrammarId = atol( pc.parameterArg + 9 );
+					break;
+				}
 				else {
 					error() << "--" << pc.parameterArg <<
 							" is an invalid argument" << endl;
@@ -662,9 +854,10 @@ void processArgs( int argc, const char **argv )
 			/* It is interpreted as an input file. */
 			if ( *pc.curArg == 0 )
 				error() << "a zero length input file name was given" << endl;
-			else if ( inputFn != 0 )
-				error() << "more than one input file name was given" << endl;
-			else {
+			else if ( inputFn != 0 ) {
+                            if ( interpret &&  inputFn2 == 0) inputFn2 = pc.curArg;
+                            else error() << "more than one input file name was given" << endl;
+			} else {
 				/* OK, Remember the filename. */
 				inputFn = pc.curArg;
 			}
@@ -696,7 +889,7 @@ int main(int argc, const char **argv)
 
 	if ( verbose )
 		gblActiveRealm = 0xffffffff;
-	
+
 	/* Bail on above errors. */
 	if ( gblErrorCount > 0 )
 		exit(1);
@@ -749,6 +942,9 @@ int main(int argc, const char **argv)
 	/* Initiate a compile following a parse. */
 	pd->compile();
 
+	if ( pdaReportFile.is_open() )
+		pdaReportFile.flush();
+
 	/*
 	 * Write output.
 	 */
@@ -760,6 +956,50 @@ int main(int argc, const char **argv)
 		outStream = &cout;
 		pd->writeEbnfFile();
 	}
+	else if ( dumpSql ) {
+		outStream = &cout;
+		pd->writeSqlFile();
+	}
+	else if ( dumpGlobals ) {
+		pd->dumpGlobals();
+	}
+	else if ( dumpRegions ) {
+		pd->dumpRegions();
+	}
+	else if ( interpret ) {
+		/* Run the program in-process from the compiler-built runtime data.
+		 * This needs no code generation and no C compilation: the compiler's
+		 * runtimeData already carries the fully built fsm_tables, pda_tables
+		 * and the internal executor hooks. */
+		struct colm_program *prg = colm_new_program( pd->runtimeData );
+
+		colm_set_debug( prg, gblActiveRealm );
+		prg->dump_lexer = dumpLexer ? 1 : 0;
+		prg->dump_cst = dumpCst ? 1 : 0;
+
+		/* Present the input file as argv[0], as a compiled program would. */
+                const char *iargv[3] = {};
+		iargv[0] = inputFn;
+                if ( inputFn2 ) iargv[1] = inputFn2;
+		colm_run_program( prg, inputFn2 ? 2 : 1, iargv );
+
+		int exit_status = colm_delete_program( prg );
+		delete parser;
+		delete pd;
+		return exit_status;
+	}
+	else if ( syntaxOnly ) {
+		/* Parse and analyze only. No code generation, no build. The lexer
+		 * state machine is reduced during analysis, so honor --dump-lexer-sm
+		 * here even though we skip all output. */
+		if ( dumpLexerSm ) {
+			openLexerSmOutput( outputFn != 0 ? outputFn : inputFn );
+			if ( outLexSmStream != 0 ) {
+				pd->dumpLexerSm();
+				delete outLexSmStream;
+			}
+		}
+	}
 	else {
 		if ( gblLibrary )
 			openOutputLibrary();
@@ -769,6 +1009,8 @@ int main(int argc, const char **argv)
 		pd->generateOutput( gblActiveRealm, ( commitCodeFn == 0 ) );
 		if ( outStream != 0 )
 			delete outStream;
+		if ( outLexSmStream != 0 )
+			delete outLexSmStream;
 
 		if ( !gblLibrary )
 			compileOutput();

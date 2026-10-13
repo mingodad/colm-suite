@@ -120,7 +120,7 @@ struct LoadColm
 			}
 		}
 	};
-	
+
 
 
 	Literal *walkLexRangeLit( lex_range_lit lexRangeLit )
@@ -176,13 +176,13 @@ struct LoadColm
 		}
 		case lex_factor::Number: {
 			String number = lexFactor.lex_uint().text().c_str();
-			factor = LexFactor::cons( Literal::cons( lexFactor.lex_uint().loc(), 
+			factor = LexFactor::cons( Literal::cons( lexFactor.lex_uint().loc(),
 					number, Literal::Number ) );
 			break;
 		}
 		case lex_factor::Hex: {
 			String number = lexFactor.lex_hex().text().c_str();
-			factor = LexFactor::cons( Literal::cons( lexFactor.lex_hex().loc(), 
+			factor = LexFactor::cons( Literal::cons( lexFactor.lex_hex().loc(),
 					number, Literal::Number ) );
 			break;
 		}
@@ -422,7 +422,7 @@ struct LoadColm
 	ObjectDef *walkVarDefList( _lrepeat_var_def varDefList )
 	{
 		ObjectDef *objectDef = ObjectDef::cons( ObjectDef::UserType,
-				String(), pd->nextObjectId++ ); 
+				String(), pd->nextObjectId++ );
 
 		RepeatIter<var_def> varDefIter( varDefList );
 
@@ -448,7 +448,7 @@ struct LoadColm
 	{
 		String name = walkOptId( IgnoreDef.opt_id() );
 		ObjectDef *objectDef = ObjectDef::cons( ObjectDef::UserType,
-				name, pd->nextObjectId++ ); 
+				name, pd->nextObjectId++ );
 
 		LexJoin *join = 0;
 		if ( IgnoreDef.opt_lex_expr().lex_expr() != 0 ) {
@@ -808,6 +808,9 @@ struct LoadColm
 		case pred_type::NonAssoc:
 			pt = PredNonassoc;
 			break;
+		case pred_type::PrecedenceOnly:
+			pt = PredPrecedence;
+			break;
 		}
 
 		return pt;
@@ -859,6 +862,7 @@ struct LoadColm
 		argv[2] = 0;
 
 		colm_program *program = colm_new_program( &colm_object );
+		program->dump_lexer = dumpLexer;
 		colm_run_program( program, 2, argv );
 
 		/* Extract the parse tree. */
@@ -867,8 +871,7 @@ struct LoadColm
 
 		if ( Start == 0 ) {
 			gblErrorCount += 1;
-			InputLoc loc = Error.loc();
-			error(loc) << file.data << ": parse error: " << Error.text() << std::endl;
+			std::cerr << Error.text() << std::endl;
 			return 0;
 		}
 
@@ -1120,8 +1123,23 @@ struct LoadColm
 			CodeBlock *codeBlock = walkOptReduce( Prod.opt_reduce() );
 			bool commit = Prod.opt_commit().prodName() == opt_commit::Commit;
 
+			/* An explicit %prec TOKEN sets this production's precedence,
+			 * overriding the last-terminal fallback. The token is stored as a
+			 * type reference and resolved after the precedence declarations in
+			 * resolveProductionEls(). */
+			TypeRef *prodPrecRef = 0;
+			opt_prod_prec prodPrec = Prod.opt_prod_prec();
+			if ( prodPrec.prodName() == opt_prod_prec::Prec ) {
+				PredDecl *predDecl = walkPredToken( prodPrec.pred_token() );
+				if ( predDecl != 0 ) {
+					prodPrecRef = predDecl->typeRef;
+					delete predDecl;
+				}
+			}
+
 			Production *prod = BaseParser::production( Prod.SQOPEN().loc(),
 					list, name, commit, codeBlock, 0 );
+			prod->prodPrecRef = prodPrecRef;
 			prodAppend( lelDefList, prod );
 		}
 	}
@@ -1129,7 +1147,7 @@ struct LoadColm
 	void walkProdList( const String &name, LelProdList *lelDefList,
 			prod_list ProdList, bool inRedef )
 	{
-		if ( ProdList.prodName() == prod_list::List ) 
+		if ( ProdList.prodName() == prod_list::List )
 			walkProdList( name, lelDefList, ProdList._prod_list(), inRedef );
 
 		walkProdudction( name, lelDefList, ProdList.prod(), inRedef );
@@ -2266,7 +2284,7 @@ struct LoadColm
 			used = true;
 			left = walkCodeRelational( codeRelational._code_relational() );
 		}
-		
+
 		LangExpr *additive = walkCodeAdditive( codeRelational.code_additive(), used );
 
 		switch ( codeRelational.prodName() ) {
@@ -2341,7 +2359,7 @@ struct LoadColm
 			iterCall = IterCall::cons( IterCall::Expr, langExpr );
 			break;
 		}}
-		
+
 		return iterCall;
 	}
 
@@ -2454,7 +2472,7 @@ struct LoadColm
 
 	void walkStructVarDef( struct_var_def StructVarDef )
 	{
-		ObjectField *objField = walkVarDef( StructVarDef.var_def(), 
+		ObjectField *objField = walkVarDef( StructVarDef.var_def(),
 				ObjectField::StructFieldType );
 		structVarDef( objField->loc, objField );
 	}
@@ -2472,7 +2490,7 @@ struct LoadColm
 		ObjectField::Type type;
 
 		switch ( paramVarDef.prodName() ) {
-		case param_var_def::Type: 
+		case param_var_def::Type:
 			typeRef = walkTypeRef( paramVarDef.type_ref() );
 			type = ObjectField::ParamValType;
 			break;
@@ -2481,7 +2499,7 @@ struct LoadColm
 			type = ObjectField::ParamRefType;
 			break;
 		}
-		
+
 		return addParam( paramVarDef.id().loc(), type, typeRef, id );
 	}
 
@@ -2734,7 +2752,7 @@ struct LoadColm
 		String text = RA.HostItems().text().c_str();
 
 		TypeRef *typeRef = walkTypeRef( RA.type_ref() );
-			
+
 		ReduceAction *ra = new ReduceAction( loc, typeRef, RA.id().data() );
 
 		walkRedItemList( RA.HostItems(), ra->itemList );
@@ -2991,6 +3009,7 @@ void LoadColm::go( long activeRealm )
 
 	colm_program *program = colm_new_program( &colm_object );
 	colm_set_debug( program, activeRealm );
+	program->dump_lexer = dumpLexer;
 	colm_run_program( program, 2, argv );
 
 	/* Extract the parse tree. */
@@ -2999,11 +3018,45 @@ void LoadColm::go( long activeRealm )
 
 	if ( Start == 0 ) {
 		gblErrorCount += 1;
-		InputLoc loc = Error.loc();
-		error(loc) << inputFileName << ": parse error: " << Error.text() << std::endl;
+		std::cerr << Error.text() << std::endl;
 		return;
 	}
 
+        if ( dumpCst ) {
+            //static const char * const hiddenPrefixes[] = {
+            //    "_repeat_",
+            //    "_lrepeat_",
+            //    "_list_",
+            //    "_llist_",
+            //    "_opt_",
+            //    0
+            //};
+            str_collect_t collect;
+            init_str_collect(&collect);
+
+            //colm_cst_tree_collect_simple_filtered(
+            //    program,
+            //    colm_vm_root(program),
+            //    &collect,
+            //    Start,
+            //    0,
+            //    hiddenPrefixes
+            //);
+            colm_cst_tree_collect_simple(
+                program,
+                colm_vm_root(program),
+                &collect,
+                Start,
+                0
+            );
+
+            std::cerr << collect.data << std::endl;
+
+            str_collect_destroy(&collect);
+            //printParseTree( program, Start.__tree );
+            //colm_delete_program( program );
+            //return;
+        }
 	StmtList *stmtList = walkRootItemList( Start.RootItemList() );
 	pd->streamFileNames.append( colm_extract_fns( program ) );
 	colm_delete_program( program );

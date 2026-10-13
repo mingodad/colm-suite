@@ -40,8 +40,8 @@ bool isTree( UniqueType *ut )
 }
 
 IterDef::IterDef( Type type )
-: 
-	type(type), 
+:
+	type(type),
 	func(0)
 {
 }
@@ -52,8 +52,8 @@ IterDef::IterDef( Type type, Function *func )
 	func(func)
 {}
 
-IterImpl::IterImpl( Type type ) : 
-	type(type), 
+IterImpl::IterImpl( Type type ) :
+	type(type),
 	func(0),
 	useFuncId(false),
 	useSearchUT(false),
@@ -101,7 +101,7 @@ IterImpl::IterImpl( Type type ) :
 		inRefFromCur = IN_TRITER_REF_FROM_CUR;
 		useSearchUT = true;
 		break;
-	
+
 	case Repeat:
 		inCreateWV = IN_TRITER_FROM_REF;
 		inCreateWC = IN_TRITER_FROM_REF;
@@ -129,7 +129,7 @@ IterImpl::IterImpl( Type type ) :
 		inRefFromCur = IN_TRITER_REF_FROM_CUR;
 		useSearchUT = true;
 		break;
-	
+
 	case ListEl:
 		inCreateWV =   IN_GEN_ITER_FROM_REF;
 		inCreateWC =   IN_GEN_ITER_FROM_REF;
@@ -219,7 +219,7 @@ IterImpl::IterImpl( Type type ) :
 	}
 }
 
-IterImpl::IterImpl( Type type, Function *func ) : 
+IterImpl::IterImpl( Type type, Function *func ) :
 	type(type),
 	func(func),
 	useFuncId(true),
@@ -315,7 +315,7 @@ ObjectField *ObjectDef::findFieldNum( long offset )
 		return 0;
 
 	int fn = 0;
-	FieldList::Iter field = fieldList; 
+	FieldList::Iter field = fieldList;
 	while ( fn < offset ) {
 		fn++;
 		field++;
@@ -395,7 +395,7 @@ void ObjectDef::referenceField( Compiler *pd, ObjectField *field )
 	field->beenReferenced = true;
 }
 
-UniqueType *LangVarRef::loadField( Compiler *pd, CodeVect &code, 
+UniqueType *LangVarRef::loadField( Compiler *pd, CodeVect &code,
 		ObjectDef *inObject, ObjectField *el, bool forWriting, bool revert ) const
 {
 	/* Ensure that the field is referenced. */
@@ -499,7 +499,7 @@ long LangVarRef::loadQualificationRefs( Compiler *pd, CodeVect &code,
 					code.append( rg->prodEl->pos );
 				}
 			}
-			else { 
+			else {
 				code.append( IN_REF_FROM_QUAL_REF );
 				code.appendHalf( 0 );
 				code.appendHalf( el->offset );
@@ -521,7 +521,7 @@ long LangVarRef::loadQualificationRefs( Compiler *pd, CodeVect &code,
 		UniqueType *elUT = el->typeRef->uniqueType;
 		if ( elUT->typeId == TYPE_ITER )
 			elUT = el->typeRef->searchUniqueType;
-		
+
 		assert( qi->form == QualItem::Dot );
 
 		ObjectDef *searchObjDef = elUT->objectDef();
@@ -532,7 +532,7 @@ long LangVarRef::loadQualificationRefs( Compiler *pd, CodeVect &code,
 	return count;
 }
 
-void LangVarRef::loadQualification( Compiler *pd, CodeVect &code, 
+void LangVarRef::loadQualification( Compiler *pd, CodeVect &code,
 		NameScope *rootScope, int lastPtrInQual, bool forWriting, bool revert ) const
 {
 	/* Start the search from the root object. */
@@ -567,9 +567,9 @@ void LangVarRef::loadQualification( Compiler *pd, CodeVect &code,
 			}
 		}
 
-		UniqueType *qualUT = loadField( pd, code, searchScope->owningObj, 
+		UniqueType *qualUT = loadField( pd, code, searchScope->owningObj,
 				el, lfForWriting, lfRevert );
-		
+
 		if ( qi->form == QualItem::Dot ) {
 			/* Cannot a reference. Iterator yes (access of the iterator not
 			 * hte current) */
@@ -596,7 +596,7 @@ void LangVarRef::loadQualification( Compiler *pd, CodeVect &code,
 	}
 }
 
-void LangVarRef::loadContextObj( Compiler *pd, CodeVect &code, 
+void LangVarRef::loadContextObj( Compiler *pd, CodeVect &code,
 		int lastPtrInQual, bool forWriting ) const
 {
 	/* Start the search in the global object. */
@@ -619,7 +619,7 @@ void LangVarRef::loadContextObj( Compiler *pd, CodeVect &code,
 	loadQualification( pd, code, rootObj->rootScope, lastPtrInQual, forWriting, true );
 }
 
-void LangVarRef::loadGlobalObj( Compiler *pd, CodeVect &code, 
+void LangVarRef::loadGlobalObj( Compiler *pd, CodeVect &code,
 		int lastPtrInQual, bool forWriting ) const
 {
 	NameScope *scope = nspace != 0 ? nspace->rootScope : pd->rootNamespace->rootScope;
@@ -641,7 +641,7 @@ void LangVarRef::loadGlobalObj( Compiler *pd, CodeVect &code,
 	loadQualification( pd, code, scope, lastPtrInQual, forWriting, true );
 }
 
-void LangVarRef::loadScopedObj( Compiler *pd, CodeVect &code, 
+void LangVarRef::loadScopedObj( Compiler *pd, CodeVect &code,
 		NameScope *scope, int lastPtrInQual, bool forWriting ) const
 {
 //	NameScope *scope = nspace != 0 ? nspace->rootScope : pd->rootNamespace->rootScope;
@@ -663,21 +663,21 @@ void LangVarRef::loadScopedObj( Compiler *pd, CodeVect &code,
 	loadQualification( pd, code, scope, lastPtrInQual, forWriting, true );
 }
 
-void LangVarRef::loadInbuiltObject( Compiler *pd, CodeVect &code, 
+void LangVarRef::loadInbuiltObject( Compiler *pd, CodeVect &code,
 		int lastPtrInQual, bool forWriting ) const
 {
 	/* Start the search in the local frame. */
 	loadQualification( pd, code, scope, lastPtrInQual, forWriting, pd->revertOn );
 }
 
-void LangVarRef::loadLocalObj( Compiler *pd, CodeVect &code, 
+void LangVarRef::loadLocalObj( Compiler *pd, CodeVect &code,
 		int lastPtrInQual, bool forWriting ) const
 {
 	/* Start the search in the local frame. */
 	loadQualification( pd, code, scope, lastPtrInQual, forWriting, false );
 }
 
-void LangVarRef::loadObj( Compiler *pd, CodeVect &code, 
+void LangVarRef::loadObj( Compiler *pd, CodeVect &code,
 		int lastPtrInQual, bool forWriting ) const
 {
 	if ( nspaceQual != 0 && nspaceQual->qualNames.length() > 0 ) {
@@ -700,7 +700,7 @@ void LangVarRef::loadObj( Compiler *pd, CodeVect &code,
 }
 
 
-bool castAssignment( Compiler *pd, CodeVect &code, UniqueType *destUT, 
+bool castAssignment( Compiler *pd, CodeVect &code, UniqueType *destUT,
 		UniqueType *destSearchUT, UniqueType *srcUT )
 {
 	if ( destUT == srcUT )
@@ -720,12 +720,12 @@ bool castAssignment( Compiler *pd, CodeVect &code, UniqueType *destUT,
 	if ( destUT->typeId == TYPE_TREE && srcUT->typeId == TYPE_REF &&
 			destUT->langEl == srcUT->langEl )
 		return true;
-	
+
 	/* Setting an iterator from a tree. */
-	if ( destUT->typeId == TYPE_ITER && srcUT->typeId == TYPE_TREE && 
+	if ( destUT->typeId == TYPE_ITER && srcUT->typeId == TYPE_TREE &&
 			destSearchUT->langEl == srcUT->langEl )
 		return true;
-	
+
 	/* Assigning nil to a tree. */
 	if ( destUT->typeId == TYPE_TREE && srcUT->typeId == TYPE_NIL )
 		return true;
@@ -743,7 +743,7 @@ bool castAssignment( Compiler *pd, CodeVect &code, UniqueType *destUT,
 	return false;
 }
 
-void LangVarRef::setFieldIter( Compiler *pd, CodeVect &code, 
+void LangVarRef::setFieldIter( Compiler *pd, CodeVect &code,
 		ObjectDef *inObject, ObjectField *el, UniqueType *objUT,
 		UniqueType *exprType, bool revert ) const
 {
@@ -751,7 +751,7 @@ void LangVarRef::setFieldIter( Compiler *pd, CodeVect &code,
 	code.appendHalf( el->offset );
 }
 
-void LangVarRef::setField( Compiler *pd, CodeVect &code, 
+void LangVarRef::setField( Compiler *pd, CodeVect &code,
 		ObjectDef *inObject, ObjectField *el,
 		UniqueType *exprUT, bool revert ) const
 {
@@ -794,7 +794,7 @@ UniqueType *LangVarRef::evaluate( Compiler *pd, CodeVect &code, bool forWriting 
 	loadObj( pd, code, lookup.lastPtrInQual, forWriting );
 
 	/* Load the field. */
-	UniqueType *ut = loadField( pd, code, lookup.inObject, 
+	UniqueType *ut = loadField( pd, code, lookup.inObject,
 			lookup.objField, forWriting, false );
 
 	return ut;
@@ -809,7 +809,7 @@ bool LangVarRef::canTakeRef( Compiler *pd, VarRefLookup &lookup ) const
 	if ( lookup.inObject->type == ObjectDef::FrameType )
 		canTake = true;
 	else if ( isLocalRef() ) {
-		if ( lookup.lastPtrInQual < 0 && ! lookup.uniqueType->ptr() ) 
+		if ( lookup.lastPtrInQual < 0 && ! lookup.uniqueType->ptr() )
 			canTake = true;
 	}
 
@@ -940,7 +940,7 @@ IterImpl *LangVarRef::chooseTriterCall( Compiler *pd,
 	return iterImpl;
 }
 
-ObjectField **LangVarRef::evaluateArgs( Compiler *pd, CodeVect &code, 
+ObjectField **LangVarRef::evaluateArgs( Compiler *pd, CodeVect &code,
 		VarRefLookup &lookup, CallArgVect *args )
 {
 	/* Parameter list is given only for user defined methods. Otherwise it
@@ -1072,7 +1072,7 @@ bool LangVarRef::isFinishCall( VarRefLookup &lookup ) const
 void LangVarRef::callOperation( Compiler *pd, CodeVect &code, VarRefLookup &lookup ) const
 {
 	/* This is for writing if it is a non-const builtin. */
-	bool forWriting = lookup.objMethod->func == 0 && 
+	bool forWriting = lookup.objMethod->func == 0 &&
 			!lookup.objMethod->isConst;
 
 	if ( lookup.objMethod->useCallObj ) {
@@ -1084,7 +1084,7 @@ void LangVarRef::callOperation( Compiler *pd, CodeVect &code, VarRefLookup &look
 	 * or if it is not local then we need to revert it. */
 	bool revert = lookup.lastPtrInQual >= 0 || !isLocalRef() || isInbuiltObject();
 	bool unwind = false;
-	
+
 	if ( isFinishCall( lookup ) ) {
 		code.append( IN_SEND_EOF_W );
 
@@ -1113,7 +1113,7 @@ void LangVarRef::callOperation( Compiler *pd, CodeVect &code, VarRefLookup &look
 			code.append( lookup.objMethod->opcodeWC );
 		}
 	}
-	
+
 	if ( lookup.objMethod->useFuncId )
 		code.appendHalf( lookup.objMethod->funcId );
 
@@ -1124,7 +1124,7 @@ void LangVarRef::callOperation( Compiler *pd, CodeVect &code, VarRefLookup &look
 		appendUnwindCode( pd, code );
 }
 
-void LangVarRef::popRefQuals( Compiler *pd, CodeVect &code, 
+void LangVarRef::popRefQuals( Compiler *pd, CodeVect &code,
 		VarRefLookup &lookup, CallArgVect *args, bool temps ) const
 {
 	long popCount = 0;
@@ -1165,7 +1165,7 @@ void LangVarRef::popRefQuals( Compiler *pd, CodeVect &code,
 }
 
 
-UniqueType *LangVarRef::evaluateCall( Compiler *pd, CodeVect &code, CallArgVect *args ) 
+UniqueType *LangVarRef::evaluateCall( Compiler *pd, CodeVect &code, CallArgVect *args )
 {
 	/* Evaluate the object. */
 	VarRefLookup lookup = lookupMethod( pd );
@@ -1385,7 +1385,7 @@ void LangTerm::assignFieldArgs( Compiler *pd, CodeVect &code, UniqueType *replUT
 			FieldInit *fieldInit = *pi;
 			ObjectField *field = objDef->findFieldNum( pi.pos() );
 			if ( field == 0 ) {
-				error(fieldInit->loc) << "failed to find init pos " << 
+				error(fieldInit->loc) << "failed to find init pos " <<
 					pi.pos() << " in object" << endp;
 			}
 
@@ -1423,14 +1423,14 @@ UniqueType *LangTerm::evaluateConstruct( Compiler *pd, CodeVect &code ) const
 	for ( ConsItemList::Iter item = constructor->list->last(); item.gtb(); item-- ) {
 		if ( item->type == ConsItem::ExprType ) {
 			UniqueType *ut = item->expr->evaluate( pd, code );
-		
+
 			if ( ut->typeId != TYPE_TREE ) {
 				error(constructor->loc) << "variables used in "
 						"replacements must be trees" << endp;
 			}
 
 			if ( !isStr( ut ) ) {
-				if ( item->trim == ConsItem::TrimYes ) 
+				if ( item->trim == ConsItem::TrimYes )
 					code.append( IN_TREE_TRIM );
 			}
 
@@ -1448,7 +1448,7 @@ UniqueType *LangTerm::evaluateConstruct( Compiler *pd, CodeVect &code ) const
 	UniqueType *replUT = typeRef->uniqueType;
 	if ( replUT->typeId != TYPE_TREE )
 		error(loc) << "don't know how to construct this type" << endp;
-	
+
 	constructor->langEl = replUT->langEl;
 	assignFieldArgs( pd, code, replUT );
 
@@ -1483,7 +1483,7 @@ UniqueType *LangTerm::evaluateReadReduce( Compiler *pd, CodeVect &code ) const
 			item->expr->evaluate( pd, code );
 			break;
 		}}
-	}	
+	}
 
 	code.append( IN_READ_REDUCE );
 	code.appendHalf( parserUT->generic->id );
@@ -1519,11 +1519,11 @@ UniqueType *LangTerm::evaluateParse( Compiler *pd, CodeVect &code,
 	for ( ConsItemList::Iter item = consItemList->last(); item.gtb(); item-- ) {
 		if ( item->type == ConsItem::ExprType ) {
 			UniqueType *ut = item->expr->evaluate( pd, code );
-		
+
 			if ( ut->typeId != TYPE_TREE )
 				error() << "variables used in replacements must be trees" << endp;
 
-			if ( item->trim == ConsItem::TrimYes ) 
+			if ( item->trim == ConsItem::TrimYes )
 				code.append( IN_TREE_TRIM );
 
 			item->langEl = ut->langEl;
@@ -1581,7 +1581,7 @@ UniqueType *LangTerm::evaluateParse( Compiler *pd, CodeVect &code,
 			case ConsItem::LiteralType: {
 				String result;
 				bool unusedCI;
-				prepareLitString( result, unusedCI, 
+				prepareLitString( result, unusedCI,
 						item->prodEl->typeRef->pdaLiteral->data,
 						item->prodEl->typeRef->pdaLiteral->loc );
 
@@ -1691,7 +1691,7 @@ void LangTerm::evaluateSendStream( Compiler *pd, CodeVect &code ) const
 		case ConsItem::LiteralType: {
 			String result;
 			bool unusedCI;
-			prepareLitString( result, unusedCI, 
+			prepareLitString( result, unusedCI,
 					item->prodEl->typeRef->pdaLiteral->data,
 					item->prodEl->typeRef->pdaLiteral->loc );
 
@@ -1767,7 +1767,7 @@ void LangTerm::evaluateSendParser( Compiler *pd, CodeVect &code, bool strings ) 
 			case ConsItem::LiteralType: {
 				String result;
 				bool unusedCI;
-				prepareLitString( result, unusedCI, 
+				prepareLitString( result, unusedCI,
 						item->prodEl->typeRef->pdaLiteral->data,
 						item->prodEl->typeRef->pdaLiteral->loc );
 
@@ -1870,7 +1870,7 @@ UniqueType *LangTerm::evaluateEmbedString( Compiler *pd, CodeVect &code ) const
 		case ConsItem::LiteralType: {
 			String result;
 			bool unusedCI;
-			prepareLitString( result, unusedCI, 
+			prepareLitString( result, unusedCI,
 					item->prodEl->typeRef->pdaLiteral->data,
 					item->prodEl->typeRef->pdaLiteral->loc );
 
@@ -2124,7 +2124,7 @@ UniqueType *LangExpr::evaluate( Compiler *pd, CodeVect &code ) const
 
 					if ( lt != rt )
 						error(loc) << "comparison of different types" << endp;
-						
+
 					if ( lt->val() )
 						code.append( IN_TST_EQL_VAL );
 					else
@@ -2278,7 +2278,7 @@ UniqueType *LangExpr::evaluate( Compiler *pd, CodeVect &code ) const
 
 					code.append( IN_TREE_TO_STR_TRIM );
 					return pd->uniqueTypeStr;
-					
+
 				}
 				case 'S': {
 					UniqueType *ut = right->evaluate( pd, code );
@@ -2293,7 +2293,7 @@ UniqueType *LangExpr::evaluate( Compiler *pd, CodeVect &code ) const
 					UniqueType *ut = right->evaluate( pd, code );
 					if ( ut->typeId == TYPE_INT || ut->typeId == TYPE_BOOL )
 						code.append( IN_INT_TO_STR );
-					else 
+					else
 						code.append( IN_TREE_TO_STR );
 					return pd->uniqueTypeStr;
 				}
@@ -2307,7 +2307,7 @@ UniqueType *LangExpr::evaluate( Compiler *pd, CodeVect &code ) const
 					//code.append( IN_TREE_TRIM );
 					return rt;
 				}
-				default: 
+				default:
 					assert(false);
 			}
 			return 0;
@@ -2319,7 +2319,7 @@ UniqueType *LangExpr::evaluate( Compiler *pd, CodeVect &code ) const
 	return 0;
 }
 
-void LangVarRef::assignValue( Compiler *pd, CodeVect &code, 
+void LangVarRef::assignValue( Compiler *pd, CodeVect &code,
 		UniqueType *exprUT ) const
 {
 	/* Lookup the left hand side of the assignment. */
@@ -2342,9 +2342,17 @@ void LangVarRef::assignValue( Compiler *pd, CodeVect &code,
 	/* Check the types of the assignment and possibly cast. */
 	UniqueType *objUT = lookup.objField->typeRef->uniqueType;
 	assert( lookup.uniqueType == lookup.objField->typeRef->uniqueType );
-	if ( !castAssignment( pd, code, objUT, lookup.iterSearchUT, exprUT ) )
-		error(loc) << "type mismatch in assignment" << endp;
-	
+	if ( !castAssignment( pd, code, objUT, lookup.iterSearchUT, exprUT ) ) {
+		//error(loc) << "type mismatch in assignment" << endp;
+		error(loc)
+			<< "type mismatch in assignment"
+			<< ": expected " << objUT->objectDef()->name
+			<< ", got " << exprUT->objectDef()->name
+			<< endp;
+		
+	}
+
+
 	/* Decide if we need to revert the assignment. */
 	bool revert = lookup.lastPtrInQual >= 0 || !isLocalRef();
 
@@ -2410,7 +2418,7 @@ UniqueType *LangTerm::evaluateMakeTree( Compiler *pd, CodeVect &code ) const
 	return pd->uniqueTypeAny;
 }
 
-void LangStmt::compileForIterBody( Compiler *pd, 
+void LangStmt::compileForIterBody( Compiler *pd,
 		CodeVect &code, UniqueType *iterUT ) const
 {
 	/* Remember the top of the loop. */
@@ -2427,7 +2435,7 @@ void LangStmt::compileForIterBody( Compiler *pd,
 	code.appendHalf( 0 );
 
 	/*
-	 * Set up the loop cleanup code. 
+	 * Set up the loop cleanup code.
 	 */
 
 	/* Add the cleanup for the current loop. */
@@ -2485,7 +2493,7 @@ void LangStmt::compileForIter( Compiler *pd, CodeVect &code ) const
 		code.appendHalf( 0 );
 	}
 
-	/* 
+	/*
 	 * Create the iterator from the local var.
 	 */
 
@@ -2550,8 +2558,8 @@ void LangStmt::compileForIter( Compiler *pd, CodeVect &code ) const
 		code.appendHalf( searchUT->langEl->id );
 
 	if ( iterImpl->useGenericId ) {
-		CodeVect unused; 
-		UniqueType *ut = 
+		CodeVect unused;
+		UniqueType *ut =
 				iterCall->langTerm->args->data[0]->expr->evaluate( pd, unused );
 
 		code.appendHalf( ut->generic->id );
@@ -2709,7 +2717,7 @@ void LangStmt::compile( Compiler *pd, CodeVect &code ) const
 			}
 			else {
 				UniqueType *resUT = pd->curFunction->typeRef->uniqueType;
-				if ( resUT != pd->uniqueTypeVoid && 
+				if ( resUT != pd->uniqueTypeVoid &&
 						!castAssignment( pd, code, resUT, 0, exprUT ) )
 					error(loc) << "return value wrong type" << endp;
 			}
@@ -3244,7 +3252,7 @@ void Compiler::placeUserFunction( Function *func, bool isUserIter )
 	func->objMethod->paramUTs = paramUTs;
 
 	/* Insert the function into the global function map. */
-	UniqueType *returnUT = func->typeRef != 0 ? 
+	UniqueType *returnUT = func->typeRef != 0 ?
 			func->typeRef->uniqueType : uniqueTypeInt;
 	func->objMethod->returnUT = returnUT;
 

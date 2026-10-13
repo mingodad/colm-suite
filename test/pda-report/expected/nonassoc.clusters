@@ -1,0 +1,7 @@
+
+=== CONFLICTS (raw: 1 shift/reduce, 0 reduce/reduce; remaining: 0 shift/reduce, 0 reduce/reduce) ===
+
+state 6  shift/reduce  reduce exp-0 | shift 5  [error nonassoc]
+tokens(1): `<
+
+conflicts: 1 shift/reduce, 0 reduce/reduce over 1 conflict entries, 1 resolved (0 by level, 0 by assoc, 1 nonassoc->error), 0 level-only ties, 0 remaining (0 shift/reduce, 0 reduce/reduce)

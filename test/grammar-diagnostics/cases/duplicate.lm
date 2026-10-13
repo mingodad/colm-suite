@@ -1,0 +1,15 @@
+# `exp` has two syntactically identical alternatives: D4.
+
+lex
+	literal `n
+	ignore / [ \t\n\r]+ /
+end
+
+def start
+	[ exp ]
+
+def exp
+	[ `n ]
+|	[ `n ]
+
+parse C: start[stdin]

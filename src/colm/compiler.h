@@ -62,10 +62,6 @@ struct Compiler;
 struct PdaCodeGen;
 struct FsmCodeGen;
 
-#define SHIFT_CODE 0x1
-#define REDUCE_CODE 0x2
-#define SHIFT_REDUCE_CODE 0x3
-
 typedef Vector<const char**> CharVectVect;
 
 /* This is used for tracking the current stack of include file/machine pairs. It is
@@ -97,7 +93,7 @@ extern ArgsVector includePaths;
 
 inline long makeReduceCode( long reduction, bool isShiftReduce )
 {
-	return ( isShiftReduce ? SHIFT_REDUCE_CODE : REDUCE_CODE ) | 
+	return ( isShiftReduce ? SHIFT_REDUCE_CODE : REDUCE_CODE ) |
 		( reduction << 2 );
 }
 
@@ -121,11 +117,20 @@ typedef Vector< ProdEl* > FactorVect;
 typedef AvlMap<String, long, ColmCmpStr> StringMap;
 typedef AvlMapEl<String, long> StringMapEl;
 
-enum PredType { 
+enum PredType {
 	PredLeft,
 	PredRight,
 	PredNonassoc,
+	PredPrecedence,
 	PredNone
+};
+
+/* Outcome of a pairwise precedence comparison between two conflicting actions. */
+enum PredOutcome {
+	PrecSwap,       /* decided: swap so the other action becomes the survivor */
+	PrecKeep,       /* decided: keep the current order */
+	PrecNonassoc,   /* decided as an error: remove both actions */
+	PrecUndecided   /* level-only tie: leave both actions, remains a conflict */
 };
 
 struct PredDecl
@@ -144,18 +149,19 @@ struct PredDecl
 typedef DList<PredDecl> PredDeclList;
 
 /* Graph dictionary. */
-struct Production 
+struct Production
 :
 	public ProdListEl, public LelProdListEl
 {
 	Production()
-	: 
+	:
 		prodName(0), prodElList(0), prodCommit(false), redBlock(0),
-		prodId(0), prodNum(0), fsm(0), fsmLength(0), uniqueEmptyLeader(0),
-		isLeftRec(false), localFrame(0), lhsField(0), predOf(0), dotDotDot(false)
+		prodId(0), prodNum(0), firstDotId(0), fsm(0), fsmLength(0), uniqueEmptyLeader(0),
+		isLeftRec(false), localFrame(0), lhsField(0), predOf(0), prodPrecRef(0),
+		dotDotDot(false)
 	{}
 
-	static Production* cons( const InputLoc &loc, LangEl *prodName, ProdElList *prodElList, 
+	static Production* cons( const InputLoc &loc, LangEl *prodName, ProdElList *prodElList,
 			String name, bool prodCommit, CodeBlock *redBlock, int prodId, int prodNum )
 	{
 		Production *p = new Production;
@@ -188,6 +194,7 @@ struct Production
 
 	int prodId;
 	int prodNum;
+	long firstDotId;
 
 	PdaGraph *fsm;
 	int fsmLength;
@@ -204,6 +211,10 @@ struct Production
 	ObjectField *lhsField;
 
 	LangEl *predOf;
+
+	/* Type reference from an explicit %prec TOKEN, resolved after the
+	 * precedence declarations in resolveProductionEls(). */
+	TypeRef *prodPrecRef;
 
 	UnsignedCharVect copy;
 	bool dotDotDot;
@@ -235,7 +246,7 @@ struct ProdList
 /* A vector of production vectors. Each non terminal can have many productions. */
 struct LelProdList
 :
-	public DListMel<Production, LelProdListEl> 
+	public DListMel<Production, LelProdListEl>
 {};
 
 /* A set of machines made during a closure round. */
@@ -332,15 +343,15 @@ struct ProdEl
 {
 	/* Language elements a factor node can be. */
 	enum Type {
-		LiteralType, 
+		LiteralType,
 		ReferenceType
-	}; 
+	};
 
 	/* Construct with a reference to a var def. */
 	ProdEl( Type type, const InputLoc &loc, ObjectField *captureField,
 			bool commit, TypeRef *typeRef, int priorVal )
 	:
-		type(type), 
+		type(type),
 		production(0),
 		captureField(captureField),
 		rhsElField(0),
@@ -354,11 +365,11 @@ struct ProdEl
 	:
 		type(ReferenceType),
 		production(0),
-		captureField(0), 
+		captureField(0),
 		rhsElField(0),
-		commit(false), 
-		typeRef(typeRef), 
-		langEl(0), 
+		commit(false),
+		typeRef(typeRef),
+		langEl(0),
 		priorVal(0)
 	{}
 
@@ -452,8 +463,41 @@ struct ReOrBlock;
 struct ReOrItem;
 struct TokenRegion;
 
+/* One raw parser conflict, captured before precedence resolution so the
+ * report can show every conflict that ever existed together with how it was
+ * disposed of. Action codes are copied because the transition may be removed
+ * (e.g. by a nonassoc error rule). */
+struct PdaConflictRec
+{
+	PdaConflictRec()
+		: state(0), lowKey(0), kind(0), toStateNum(-1),
+		  resolve(0), stillConflict(false), levelOnlyTie(false),
+		  survivingAction(-1)
+	{}
 
-/* Class to collect information about the machine during the 
+	PdaState *state;
+	long lowKey;
+	int kind;             /* 1 shift/reduce, 2 reduce/reduce */
+	long toStateNum;      /* shift target state number, or -1 */
+	Vector<long> actions;   /* raw action codes, in order */
+	int resolve;          /* PdaResolveFlag bits set during resolution */
+	bool stillConflict;   /* survived precedence resolution */
+	bool levelOnlyTie;    /* survived as a `precedence`-only tie */
+	long survivingAction; /* first action left, or -1 if the trans was removed */
+};
+typedef Vector<PdaConflictRec> PdaConflictRecVect;
+
+/* --pda-report output modes. */
+enum PdaReportMode {
+	PdaReportOff = 0,
+	PdaReportFull,       /* raw dump + index + final dump (compat) */
+	PdaReportConflicts,  /* grouped conflicts, with item detail */
+	PdaReportClusters,   /* grouped conflicts + cross-state shapes */
+	PdaReportJson        /* machine-readable grouped conflicts */
+};
+
+
+/* Class to collect information about the machine during the
  * parse of input. */
 struct Compiler
 {
@@ -461,6 +505,9 @@ struct Compiler
 	 * fsm specification. */
 	Compiler();
 	~Compiler();
+
+	int execute();
+	int executeScanner();
 
 	/*
 	 * Setting up the graph dict.
@@ -489,10 +536,29 @@ struct Compiler
 	void fsmFailure( const InputLoc &loc, const FsmRes &res );
 
 	void analyzeGraph( FsmAp *graph );
-	void resolvePrecedence( PdaGraph *pdaGraph );
+	void resolvePrecedence( PdaGraph *pdaGraph, std::ostream &out );
 	LangEl *predOf( PdaTrans *trans, long action );
-	bool precedenceSwap( long action1, long action2, LangEl *l1, LangEl *l2 );
-	bool precedenceRemoveBoth( LangEl *l1, LangEl *l2 );
+	PredOutcome precedenceSwap( long action1, long action2, LangEl *l1, LangEl *l2 );
+	void printPrecedenceDecision( std::ostream &out, PdaState *state, PdaTrans *trans,
+			LangEl *l1, LangEl *l2, PredOutcome result );
+	int pdaConflictClass( PdaTrans *trans );
+	bool pdaStateHasConflict( PdaState *state );
+	void countPdaConflicts( PdaGraph *pdaGraph, long &shiftReduce, long &reduceReduce );
+	long countPdaConflictEntries( PdaGraph *pdaGraph );
+
+	/* Conflict report: snapshot raw conflicts, annotate them during
+	 * resolution, then print them grouped. */
+	void snapshotPdaConflicts( PdaGraph *pdaGraph );
+	void finishPdaConflict( PdaTrans *trans );
+	bool pdaConflictLevelTie( PdaTrans *trans );
+	void printPdaAction( std::ostream &out, long act, long toStateNum );
+	void printPdaConflictItems( std::ostream &out, PdaState *state,
+			const PdaConflictRec &rec );
+	void printPdaConflicts( std::ostream &out, bool withItems, bool withShapes );
+	void printPdaConflictShapes( std::ostream &out );
+	void printPdaConflictsJson( std::ostream &out );
+	bool pdaConflictPassesFilter( PdaState *state, long lowKey );
+	void assignReportStateNumbers( PdaGraph *pdaGraph );
 
 	void placeFrameFields( ObjectDef *localFrame );
 	void placeUserFunction( Function *func, bool isUserIter );
@@ -596,6 +662,20 @@ struct Compiler
 	void addDupTerms( PdaGraph *pdaGraph );
 	void linkExpansions( PdaGraph *pdaGraph );
 	void lalr1FollowEpsilonOp( PdaGraph *pdaGraph );
+	void recordPdaConflict( PdaTrans *trans );
+	void printPdaReport( std::ostream &out, PdaGraph *pdaGraph, bool conflictsOnly );
+	void printPdaState( std::ostream &out, PdaState *state );
+	void printDotItem( std::ostream &out, long dot );
+	/* Append a `[file:line]` source-location suffix for a production, if known. */
+	void printLocSuffix( std::ostream &out, Production *prod );
+	Production *prodForDot( long dot );
+	int dotPosForDot( long dot );
+	void printPdaStateConflicts( std::ostream &out, PdaState *state );
+	int prodLength( Production *prod );
+	void printDotItemForConflict( std::ostream &out, long dot, const char *label );
+	void printConflictDetails( std::ostream &out, PdaState *state, PdaTrans *trans );
+	void printRawConflictReport( std::ostream &out, PdaGraph *pdaGraph );
+	void printFinalConflictReport( std::ostream &out, PdaGraph *pdaGraph, bool conflictsOnly );
 
 	void transferCommits( PdaGraph *pdaGraph, PdaTrans *trans, PdaState *state, long prodId );
 
@@ -607,7 +687,7 @@ struct Compiler
 
 	void lalr1AddFollowSets( PdaGraph *pdaGraph, LangElSet &parserEls );
 
-	void lr0BringInItem( PdaGraph *pdaGraph, PdaState *dest, PdaState *prodState, 
+	void lr0BringInItem( PdaGraph *pdaGraph, PdaState *dest, PdaState *prodState,
 			PdaTrans *expandFrom, Production *prod );
 	void lr0InvokeClosure( PdaGraph *pdaGraph, PdaState *state );
 	void lr0CloseAllStates( PdaGraph *pdaGraph );
@@ -628,13 +708,13 @@ struct Compiler
 	void addRegion( PdaState *tabState, PdaTrans *pdaTrans, long pdaKey,
 			bool noPreIgnore, bool noPostIgnore );
 	PdaState *followProd( PdaState *tabState, PdaState *prodState );
-	void findFollow( AlphSet &result, PdaState *overTab, 
+	void findFollow( AlphSet &result, PdaState *overTab,
 			PdaState *overSrc, Production *parentDef );
 	void pdaActionOrder( PdaGraph *pdaGraph, LangElSet &parserEls );
-	void pdaOrderFollow( LangEl *rootEl, PdaState *tabState, 
+	void pdaOrderFollow( LangEl *rootEl, PdaState *tabState,
 			PdaTrans *tabTrans, PdaTrans *srcTrans,
 			Production *parentDef, Production *definition, long &time );
-	void pdaOrderProd( LangEl *rootEl, PdaState *tabState, 
+	void pdaOrderProd( LangEl *rootEl, PdaState *tabState,
 			PdaState *srcState, Production *parentDef, long &time );
 	void analyzeMachine( PdaGraph *pdaGraph, LangElSet &parserEls );
 
@@ -671,6 +751,7 @@ struct Compiler
 	void parsePatterns();
 
 	void collectParserEls( LangElSet &parserEls );
+	void reportGrammarDiagnostics( LangElSet &parserEls );
 	void makeParser( LangElSet &parserEls );
 	PdaGraph *makePdaGraph( BstSet<LangEl*> &parserEls  );
 	struct pda_tables *makePdaTables( PdaGraph *pdaGraph );
@@ -753,6 +834,7 @@ struct Compiler
 
 	void resolveUses();
 	void generateOutput( long activeRealm, bool includeCommit );
+	void dumpLexerSm();
 	void compile();
 
 	void openNameSpace( ostream &out, Namespace *nspace );
@@ -764,13 +846,13 @@ struct Compiler
 	struct local_info *makeLocalInfo( Locals &locals );
 	short *makeTrees( ObjectDef *objectDef, int &numTrees );
 
-	/* 
+	/*
 	 * Graphviz Generation
 	 */
 	void writeTransList( PdaState *state );
 	void writeDotFile( PdaGraph *graph );
 	void writeDotFile( );
-	
+
 	/*
 	 * EBNF Generation
 	 */
@@ -778,6 +860,22 @@ struct Compiler
 	void writeEbnfProduction( Production *prod );
 	void writeEbnfLangEl( LangEl *lel );
 	void writeEbnfFile();
+	void writeSqlFile();
+
+	void dumpRepeatType( const RepeatType repeatType );
+	void dumpNamespaceQual( const NamespaceQual *nspaceQual );
+	void dumpIterType( const IterDef *iterDef );
+	void dumpGenericType( const GenericType *generic );
+	void dumpType( const UniqueType *ut );
+	void dumpUniqueType( const UniqueType *ut );
+	void dumpTypeRef( const TypeRef *tr );
+	void dumpStruct( const StructDef &structDef );
+	void dumpField( const ObjectField *field );
+	void dumpMethod( const ObjectMethod *method );
+	void dumpTypeAlias( const TypeAlias &alias );
+	void dumpGeneric( const GenericType &generic );
+	void dumpGlobals();
+	void dumpRegions();
 
 	/*
 	 * Data collected during the parse.
@@ -793,7 +891,7 @@ struct Compiler
 	PredDeclList predDeclList;
 
 	/* The name of the file the fsm is from, and the spec name. */
-	// EXISTS IN RL: char *fileName; 
+	// EXISTS IN RL: char *fileName;
 	String parserName;
 	// EXISTS IN RL: InputLoc sectionLoc;
 
@@ -956,6 +1054,16 @@ struct Compiler
 
 	long predValue;
 	long nextMatchEndNum;
+	long pdaShiftReduceConflicts;
+	long pdaReduceReduceConflicts;
+	long pdaResolvedConflicts;
+	long pdaRemainingShiftReduce;
+	long pdaRemainingReduceReduce;
+	long pdaPrecedenceTies;
+	long pdaResolvedByLevel;
+	long pdaResolvedByAssoc;
+	PdaConflictRecVect pdaConflicts;
+	long pdaResolvedNonassoc;
 
 	TypeRef *argvTypeRef;
 	TypeRef *stdsTypeRef;
@@ -1005,7 +1113,7 @@ Key makeFsmKeyDec( char *str, const InputLoc &loc, Compiler *pd );
 Key makeFsmKeyNum( char *str, const InputLoc &loc, Compiler *pd );
 Key makeFsmKeyChar( char c, Compiler *pd );
 void makeFsmKeyArray( Key *result, char *data, int len, Compiler *pd );
-void makeFsmUniqueKeyArray( KeySet &result, char *data, int len, 
+void makeFsmUniqueKeyArray( KeySet &result, char *data, int len,
 		bool caseInsensitive, Compiler *pd );
 FsmAp *makeBuiltin( BuiltinMachine builtin, Compiler *pd );
 
@@ -1027,31 +1135,31 @@ void declareTypeAlias( Compiler *pd, Namespace *nspace,
 
 LangEl *findType( Compiler *pd, Namespace *nspace, const String &data );
 
-ObjectMethod *initFunction( UniqueType *retType, ObjectDef *obj, 
+ObjectMethod *initFunction( UniqueType *retType, ObjectDef *obj,
 		ObjectMethod::Type type, const String &name, int methIdWV, int methIdWC,
 		bool isConst, bool useFnInstr = false, GenericType *useGeneric = 0 );
 
-ObjectMethod *initFunction( UniqueType *retType, ObjectDef *obj, 
+ObjectMethod *initFunction( UniqueType *retType, ObjectDef *obj,
 		ObjectMethod::Type type, const String &name, int methIdWV, int methIdWC,
 		UniqueType *arg1, bool isConst, bool useFnInstr = false,
 		GenericType *useGeneric = 0 );
 
-ObjectMethod *initFunction( UniqueType *retType, ObjectDef *obj, 
-		ObjectMethod::Type type, const String &name, int methIdWV, int methIdWC, 
+ObjectMethod *initFunction( UniqueType *retType, ObjectDef *obj,
+		ObjectMethod::Type type, const String &name, int methIdWV, int methIdWC,
 		UniqueType *arg1, UniqueType *arg2, bool isConst,
 		bool useFnInstr = false, GenericType *useGeneric = 0 );
 
-ObjectMethod *initFunction( UniqueType *retType, Namespace *nspace, ObjectDef *obj, 
+ObjectMethod *initFunction( UniqueType *retType, Namespace *nspace, ObjectDef *obj,
 		ObjectMethod::Type type, const String &name, int methIdWV, int methIdWC,
 		bool isConst, bool useFnInstr = false, GenericType *useGeneric = 0 );
 
-ObjectMethod *initFunction( UniqueType *retType, Namespace *nspace, ObjectDef *obj, 
+ObjectMethod *initFunction( UniqueType *retType, Namespace *nspace, ObjectDef *obj,
 		ObjectMethod::Type type, const String &name, int methIdWV, int methIdWC,
 		UniqueType *arg1, bool isConst, bool useFnInstr = false,
 		GenericType *useGeneric = 0 );
 
-ObjectMethod *initFunction( UniqueType *retType, Namespace *nspace, ObjectDef *obj, 
-		ObjectMethod::Type type, const String &name, int methIdWV, int methIdWC, 
+ObjectMethod *initFunction( UniqueType *retType, Namespace *nspace, ObjectDef *obj,
+		ObjectMethod::Type type, const String &name, int methIdWV, int methIdWC,
 		UniqueType *arg1, UniqueType *arg2, bool isConst,
 		bool useFnInstr = false, GenericType *useGeneric = 0 );
 

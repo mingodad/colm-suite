@@ -1,0 +1,3 @@
+warning: non-terminal 'unused' is unreachable (not used by any parse rule)
+grammar: 1 unreachable, 0 unproductive, 0 duplicate, 0 subsumed, 0 ebnf-redundant
+conflicts: 0 shift/reduce, 0 reduce/reduce over 0 conflict entries, 0 resolved (0 by level, 0 by assoc, 0 nonassoc->error), 0 level-only ties, 0 remaining (0 shift/reduce, 0 reduce/reduce)

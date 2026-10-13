@@ -707,3 +707,172 @@ void FsmCodeGen::writeCode()
 		"\n";
 }
 
+string FsmCodeGen::formatChar( Key key )
+{
+	ostringstream ret;
+
+	long value = key.getVal();
+
+	switch ( value ) {
+	case '\t': ret << "\\t"; break;
+	case '\n': ret << "\\n"; break;
+	case '\r': ret << "\\r"; break;
+	case '\\': ret << "\\\\"; break;
+	default:
+		if ( value >= 32 && value <= 126 )
+			ret << static_cast<char>(value);
+		else
+			ret << "\\x" << std::hex << value;
+		break;
+	}
+
+	return ret.str();
+}
+
+string FsmCodeGen::formatKey( Key key )
+{
+	if ( key.getVal() == ' ' )
+		return "[ ]";
+
+	return formatChar(key);
+}
+
+string FsmCodeGen::formatRange( Key lowKey, Key highKey )
+{
+	ostringstream ret;
+
+	if ( keyOps->eq(lowKey, highKey) )
+		return formatKey(lowKey);
+
+	ret << "[" << formatChar(lowKey)
+	    << "-" << formatChar(highKey) << "]";
+
+	return ret.str();
+}
+
+string FsmCodeGen::formatAction( const RedAction *action )
+{
+	ostringstream ret;
+
+	if ( action == 0 )
+		return "";
+
+	ret << "  [action";
+
+	for ( GenActionTable::Iter item = action->key; item.lte(); item++ ) {
+		LexAction *lexAction = reducer->lexAction(item->value);
+
+		ret << " {";
+
+		for ( InlineList::Iter in = *lexAction->inlineList;
+				in.lte(); in++ ) {
+
+			switch ( in->type ) {
+			case InlineItem::LmSetActId:
+				ret << " set-act";
+				break;
+
+			case InlineItem::LmSetTokEnd:
+				ret << " tokend";
+				break;
+
+			case InlineItem::LmInitAct:
+				ret << " init-act";
+				break;
+
+			case InlineItem::LmSetTokStart:
+				ret << " tokstart";
+				break;
+
+			case InlineItem::LmSwitch:
+				ret << " lm-switch";
+				break;
+
+			case InlineItem::LmOnLast:
+				ret << " lm-last";
+				break;
+
+			case InlineItem::LmOnNext:
+				ret << " lm-next";
+				break;
+
+			case InlineItem::LmOnLagBehind:
+				ret << " lm-lag";
+				break;
+
+			default:
+				ret << " ?";
+				break;
+			}
+		}
+
+		ret << " }";
+	}
+
+	ret << "]";
+
+	return ret.str();
+}
+
+string FsmCodeGen::formatTransition( const RedTransAp *trans )
+{
+	ostringstream ret;
+
+	if ( trans->p.action != 0 )
+		ret << formatAction(trans->p.action);
+
+	return ret.str();
+}
+
+void FsmCodeGen::writeDebugFsm( ostream &out )
+{
+	out << "Reduced lexer FSM\n";
+	out << "=================\n\n";
+
+	for ( RedStateList::Iter st = redFsm->stateList; st.lte(); st++ ) {
+
+		if ( st == redFsm->errState ) {
+			out << "State: " << st->id << "  [ERROR STATE]\n\n";
+			continue;
+		}
+		out << "State: " << st->id << "\n";
+
+		for ( int i = 0; i < st->outSingle.length(); i++ ) {
+			RedTransEl &el = st->outSingle.data[i];
+			RedTransAp *trans = el.value;
+
+			out << "  " << formatKey(el.lowKey)
+				<< " -> " << trans->p.targ->id;
+
+			if ( trans->p.action != 0 )
+				out << formatTransition(trans);
+
+			out << "\n";
+		}
+
+		for ( int i = 0; i < st->outRange.length(); i++ ) {
+			RedTransEl &el = st->outRange.data[i];
+			RedTransAp *trans = el.value;
+
+			out << "  " << formatRange(el.lowKey, el.highKey)
+				<< " -> " << trans->p.targ->id;
+
+			if ( trans->p.action != 0 )
+				out << formatTransition(trans);
+
+			out << "\n";
+		}
+
+		if ( st->defTrans != 0 ) {
+			out << "  DEFAULT -> "
+				<< st->defTrans->p.targ->id;
+
+			if ( st->defTrans->p.action != 0 )
+				out << formatTransition(st->defTrans);
+
+			out << "\n";
+		}
+
+		out << "\n";
+	}
+}

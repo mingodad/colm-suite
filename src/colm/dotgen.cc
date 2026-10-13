@@ -36,8 +36,8 @@ void Compiler::writeTransList( PdaState *state )
 		out << "\t" << state->stateNum << " -> " << trans->value->toState->stateNum;
 
 		/* Begin the label. */
-		out << " [ label = \""; 
-		long key = trans->key;  
+		out << " [ label = \"";
+		long key = trans->key;
 		LangEl *lel = langElIndex[key];
 		if ( lel != 0 )
 			out << lel->name;
@@ -47,17 +47,17 @@ void Compiler::writeTransList( PdaState *state )
 		if ( trans->value->actions.length() > 0 ) {
 			out << " / ";
 			for ( ActDataList::Iter act = trans->value->actions; act.lte(); act++ ) {
-				switch ( *act & 0x3 ) {
-				case 1: 
+				switch ( *act & SHIFT_REDUCE_MASK ) {
+				case SHIFT_CODE:
 					out << "S(" << trans->value->actOrds[act.pos()] << ")";
 					break;
-				case 2: {
-					out << "R(" << prodIdIndex[(*act >> 2)]->data <<
+				case REDUCE_CODE: {
+					out << "R(" << prodIdIndex[GET_SHIFT_REDUCE(*act)]->data <<
 							", " << trans->value->actOrds[act.pos()] << ")";
 					break;
 				}
-				case 3: {
-					out << "SR(" << prodIdIndex[(*act >> 2)]->data << 
+				case SHIFT_REDUCE_CODE: {
+					out << "SR(" << prodIdIndex[GET_SHIFT_REDUCE(*act)]->data <<
 							", " << trans->value->actOrds[act.pos()] << ")";
 					break;
 				}}
@@ -73,22 +73,22 @@ void Compiler::writeTransList( PdaState *state )
 void Compiler::writeDotFile( PdaGraph *graph )
 {
 	ostream &out = *outStream;
-	out << 
+	out <<
 		"digraph " << parserName << " {\n"
 		"	rankdir=LR;\n"
 		"	ranksep=\"0\"\n"
 		"	nodesep=\"0.25\"\n"
 		"\n";
-	
+
 	/* Define the psuedo states. Transitions will be done after the states
 	 * have been defined as either final or not final. */
-	out << 
+	out <<
 		"	node [ shape = point ];\n";
-	
+
 	for ( int i = 0; i < graph->entryStateSet.length(); i++ )
 		out << "\tENTRY" << i <<  " [ label = \"\" ];\n";
 
-	out << 
+	out <<
 		"\n"
 		"	node [ shape = circle, fixedsize = true, height = 0.6 ];\n";
 

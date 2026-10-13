@@ -1,0 +1,3 @@
+warning: duplicate production for 'exp' (same as the rule at duplicate.lm:12)
+grammar: 0 unreachable, 0 unproductive, 1 duplicate, 0 subsumed, 0 ebnf-redundant
+conflicts: 0 shift/reduce, 1 reduce/reduce over 1 conflict entries, 0 resolved (0 by level, 0 by assoc, 0 nonassoc->error), 0 level-only ties, 1 remaining (0 shift/reduce, 1 reduce/reduce)

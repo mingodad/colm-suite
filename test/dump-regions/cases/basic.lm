@@ -1,0 +1,13 @@
+lex
+	token Number / [0-9]+ /
+	token Plus / '+' /
+	ignore / [ \t\n]+ /
+end
+
+def e [ Number ] | [ e Plus e ]
+
+parse E: e[stdin]
+if ( E )
+	print("ok\n")
+else
+	print("fail\n")

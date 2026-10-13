@@ -126,7 +126,7 @@ void BaseParser::init()
 	/* Setup the global object. */
 	String global = "global";
 	pd->globalObjectDef = ObjectDef::cons( ObjectDef::UserType,
-			global, pd->nextObjectId++ ); 
+			global, pd->nextObjectId++ );
 
 	pd->rootNamespace->rootScope->owningObj = pd->globalObjectDef;
 
@@ -136,7 +136,7 @@ void BaseParser::init()
 	/* Setup the input object. */
 	global = "_input";
 	ObjectDef *objectDef = ObjectDef::cons( ObjectDef::BuiltinType,
-			global, pd->nextObjectId++ ); 
+			global, pd->nextObjectId++ );
 
 	pd->input = new StructDef( internal, global, objectDef );
 	pd->inputSel = declareStruct( pd, pd->rootNamespace,
@@ -145,7 +145,7 @@ void BaseParser::init()
 	/* Setup the stream object. */
 	global = "stream";
 	objectDef = ObjectDef::cons( ObjectDef::BuiltinType,
-			global, pd->nextObjectId++ ); 
+			global, pd->nextObjectId++ );
 
 	pd->stream = new StructDef( internal, global, objectDef );
 	pd->streamSel = declareStruct( pd, pd->rootNamespace,
@@ -157,7 +157,7 @@ void BaseParser::init()
 	 * the builtins. */
 	pd->initGraphDict();
 
-	pd->rootLocalFrame = ObjectDef::cons( ObjectDef::FrameType, 
+	pd->rootLocalFrame = ObjectDef::cons( ObjectDef::FrameType,
 				"local", pd->nextObjectId++ );
 	localFrameTop = pd->rootLocalFrame;
 	scopeTop = pd->rootLocalFrame->rootScope;
@@ -217,9 +217,9 @@ void BaseParser::pushRegionSet( const InputLoc &loc )
 	TokenRegion *collectIgnore = createRegion( loc, implIgnoreOnly );
 
 	RegionSet *regionSet = new RegionSet(
-			pd->regionSetList.length(), loc,
-			implTokenIgnore, implTokenIgnore, implIgnoreOnly,
-			tokenIgnore, tokenOnly, ignoreOnly, collectIgnore );
+        pd->regionSetList.length(), loc,
+        implTokenIgnore, implTokenOnly, implIgnoreOnly,
+        tokenIgnore, tokenOnly, ignoreOnly, collectIgnore );
 
 	collectIgnore->ignoreOnly = ignoreOnly;
 
@@ -252,7 +252,7 @@ Namespace *BaseParser::createNamespace( const InputLoc &loc, const String &name 
 
 	/* Make the new namespace. */
 	Namespace *nspace = parent->findNamespace( name );
-	
+
 	if ( nspace == 0 ) {
 		nspace = new Namespace( loc, name,
 				pd->namespaceList.length(), parent );
@@ -306,7 +306,7 @@ void BaseParser::defineToken( const InputLoc &loc, String name, LexJoin *join,
 	if ( !insideRegion() ) {
 		if ( ignore )
 			error(loc) << "ignore tokens can only appear inside scanners" << endp;
-	
+
 		pushedRegion = true;
 		pushRegionSet( internal );
 	}
@@ -315,14 +315,14 @@ void BaseParser::defineToken( const InputLoc &loc, String name, LexJoin *join,
 	if ( !ignore && name == 0 )
 		error(loc) << "tokens must have a name" << endp;
 
-	/* Give a default name to ignores. */ 
+	/* Give a default name to ignores. */
 	if ( name == 0 )
 		name.setAs( 32, "_ignore_%.4x", pd->nextTokenId );
 
 	Namespace *nspace = curNspace();
 	RegionSet *regionSet = regionStack.top();
 
-	TokenDef *tokenDef = TokenDef::cons( name, String(), false, ignore, join, 
+	TokenDef *tokenDef = TokenDef::cons( name, String(), false, ignore, join,
 			transBlock, loc, nspace, regionSet, objectDef, curStruct() );
 
 	regionSet->tokenDefList.append( tokenDef );
@@ -332,7 +332,7 @@ void BaseParser::defineToken( const InputLoc &loc, String name, LexJoin *join,
 	tokenDef->noPostIgnore = noPostIgnore;
 
 	TokenInstance *tokenInstance = TokenInstance::cons( tokenDef,
-			join, loc, pd->nextTokenId++, nspace, 
+			join, loc, pd->nextTokenId++, nspace,
 			regionSet->tokenIgnore );
 
 	regionSet->tokenIgnore->impl->addToken( tokenInstance );
@@ -417,18 +417,18 @@ void BaseParser::literalDef( const InputLoc &loc, const String &data,
 
 	LexJoin *join = literalJoin( loc, data );
 
-	ObjectDef *objectDef = ObjectDef::cons( ObjectDef::UserType, 
+	ObjectDef *objectDef = ObjectDef::cons( ObjectDef::UserType,
 			name, pd->nextObjectId++ );
 
 	/* The token definition. */
-	TokenDef *tokenDef = TokenDef::cons( name, data, true, false, join, 
+	TokenDef *tokenDef = TokenDef::cons( name, data, true, false, join,
 			0, loc, nspace, regionSet, objectDef, 0 );
 
 	regionSet->tokenDefList.append( tokenDef );
 	nspace->tokenDefList.append( tokenDef );
 
 	/* The instance for the token/ignore region. */
-	TokenInstance *tokenInstance = TokenInstance::cons( tokenDef, join, 
+	TokenInstance *tokenInstance = TokenInstance::cons( tokenDef, join,
 			loc, pd->nextTokenId++, nspace, regionSet->tokenIgnore );
 
 	regionSet->tokenIgnore->impl->addToken( tokenInstance );
@@ -469,7 +469,7 @@ void BaseParser::addStdsList()
 ObjectDef *BaseParser::blockOpen()
 {
 	/* Init the object representing the local frame. */
-	ObjectDef *frame = ObjectDef::cons( ObjectDef::FrameType, 
+	ObjectDef *frame = ObjectDef::cons( ObjectDef::FrameType,
 			"local", pd->nextObjectId++ );
 
 	localFrameTop = frame;
@@ -487,7 +487,7 @@ void BaseParser::functionDef( StmtList *stmtList, ObjectDef *localFrame,
 	ParameterList *paramList, TypeRef *typeRef, const String &name, bool exprt )
 {
 	CodeBlock *codeBlock = CodeBlock::cons( stmtList, localFrame );
-	Function *newFunction = Function::cons( curNspace(), typeRef, name, 
+	Function *newFunction = Function::cons( curNspace(), typeRef, name,
 			paramList, codeBlock, pd->nextFuncId++, false, exprt );
 	pd->functionList.append( newFunction );
 	newFunction->inContext = curStruct();
@@ -496,7 +496,7 @@ void BaseParser::functionDef( StmtList *stmtList, ObjectDef *localFrame,
 void BaseParser::inHostDef( const String &hostCall, ObjectDef *localFrame,
 	ParameterList *paramList, TypeRef *typeRef, const String &name, bool exprt )
 {
-	Function *newFunction = Function::cons( curNspace(), typeRef, name, 
+	Function *newFunction = Function::cons( curNspace(), typeRef, name,
 			paramList, 0, pd->nextHostId++, false, exprt );
 	newFunction->hostCall = hostCall;
 	newFunction->localFrame = localFrame;
@@ -509,12 +509,12 @@ void BaseParser::iterDef( StmtList *stmtList, ObjectDef *localFrame,
 	ParameterList *paramList, const String &name )
 {
 	CodeBlock *codeBlock = CodeBlock::cons( stmtList, localFrame );
-	Function *newFunction = Function::cons( curNspace(), 0, name, 
+	Function *newFunction = Function::cons( curNspace(), 0, name,
 			paramList, codeBlock, pd->nextFuncId++, true, false );
 	pd->functionList.append( newFunction );
 }
 
-LangStmt *BaseParser::globalDef( ObjectField *objField, LangExpr *expr, 
+LangStmt *BaseParser::globalDef( ObjectField *objField, LangExpr *expr,
 		LangStmt::Type assignType )
 {
 	LangStmt *stmt = 0;
@@ -554,7 +554,7 @@ LangStmt *BaseParser::exportStmt( ObjectField *objField,
 	objField->isExport = true;
 
 	if ( expr != 0 ) {
-		LangVarRef *varRef = LangVarRef::cons( objField->loc, 
+		LangVarRef *varRef = LangVarRef::cons( objField->loc,
 				curNspace(), 0, curScope(), objField->name );
 
 		stmt = LangStmt::cons( objField->loc, assignType, varRef, expr );
@@ -683,7 +683,7 @@ LexFactorAug *BaseParser::lexFactorLabel( const InputLoc &loc,
 	Action *leave = new LexAction( MarkMark, pd->nextMatchEndNum++ );
 	pd->actionList.append( enter );
 	pd->actionList.append( leave );
-	
+
 	/* Add entering and leaving actions. */
 	factorAug->actions.append( ParserAction( loc, at_start, 0, enter ) );
 	factorAug->actions.append( ParserAction( loc, at_leave, 0, leave ) );
@@ -737,7 +737,7 @@ LangExpr *BaseParser::parseCmd( const InputLoc &loc, bool tree, bool stop,
 
 	/* Item list for what we are sending to the parser. */
 	ConsItemList *consItemList = new ConsItemList;
-	
+
 	/* The parser may be referenced. */
 	LangVarRef *varRef = 0;
 	if ( objField != 0 ) {
@@ -756,7 +756,7 @@ LangExpr *BaseParser::parseCmd( const InputLoc &loc, bool tree, bool stop,
 			list, used, reduce, read, reducer );
 	pd->parserTextList.append( parserText );
 
-	LangTerm::Type langTermType = stop ? LangTerm::ParseStopType : ( tree ? 
+	LangTerm::Type langTermType = stop ? LangTerm::ParseStopType : ( tree ?
 					LangTerm::ParseTreeType : LangTerm::ParseType );
 
 	expr = LangExpr::cons( LangTerm::cons( loc, langTermType,
@@ -785,7 +785,7 @@ PatternItemList *BaseParser::consPatternEl( LangVarRef *varRef, PatternItemList 
 
 	if ( varRef != 0 ) {
 		if ( curScope()->checkRedecl( varRef->name ) != 0 ) {
-			error( varRef->loc ) << "variable " << varRef->name << 
+			error( varRef->loc ) << "variable " << varRef->name <<
 					" redeclared" << endp;
 		}
 
@@ -834,7 +834,7 @@ PatternItemList *BaseParser::patListConcat( PatternItemList *list1,
 {
 	if ( list1 == 0 )
 		list1 = new PatternItemList();
-		
+
 	list1->append( *list2 );
 	delete list2;
 	return list1;
@@ -865,7 +865,7 @@ LangStmt *BaseParser::forScope( const InputLoc &loc, const String &data,
 			ObjectField::UserLocalType, (TypeRef*)0, data );
 	curScope()->insertField( data, iterField );
 
-	LangStmt *stmt = LangStmt::cons( loc, LangStmt::ForIterType, 
+	LangStmt *stmt = LangStmt::cons( loc, LangStmt::ForIterType,
 			iterField, typeRef, iterCall, stmtList, curStruct(), scope );
 
 	return stmt;
@@ -951,7 +951,7 @@ LangExpr *BaseParser::construct( const InputLoc &loc, ObjectField *objField,
 	Constructor *constructor = Constructor::cons( loc, curNspace(),
 			list, pd->nextPatConsId++ );
 	pd->replList.append( constructor );
-	
+
 	LangVarRef *varRef = 0;
 	if ( objField != 0 ) {
 		varRef = LangVarRef::cons( objField->loc,
@@ -983,7 +983,7 @@ LangExpr *BaseParser::match( const InputLoc &loc, LangVarRef *varRef,
 			list, pd->nextPatConsId++ );
 	pd->patternList.append( pattern );
 
-	LangExpr *expr = LangExpr::cons( LangTerm::consMatch( 
+	LangExpr *expr = LangExpr::cons( LangTerm::consMatch(
 			InputLoc(), varRef, pattern ) );
 
 	return expr;
@@ -992,7 +992,7 @@ LangExpr *BaseParser::match( const InputLoc &loc, LangVarRef *varRef,
 LangExpr *BaseParser::prodCompare( const InputLoc &loc, LangVarRef *varRef,
 		const String &prod, LangExpr *matchExpr )
 {
-	LangExpr *expr = LangExpr::cons( LangTerm::consProdCompare( 
+	LangExpr *expr = LangExpr::cons( LangTerm::consProdCompare(
 			InputLoc(), varRef, prod, matchExpr ) );
 
 	return expr;
@@ -1055,7 +1055,7 @@ void BaseParser::structHead( const InputLoc &loc, Namespace *inNspace,
 		const String &data, ObjectDef::Type objectType )
 {
 	ObjectDef *objectDef = ObjectDef::cons( objectType,
-			data, pd->nextObjectId++ ); 
+			data, pd->nextObjectId++ );
 
 	StructDef *context = new StructDef( loc, data, objectDef );
 	structStack.push( context );

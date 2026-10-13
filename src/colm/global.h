@@ -43,8 +43,23 @@ std::ostream &error();
 
 /* IO filenames and stream. */
 extern std::ostream *outStream;
+extern std::ostream *outLexSmStream;
 extern bool generateGraphviz;
 extern bool generateEbnf;
+extern bool generatePdaReport;
+extern int pdaReportMode;
+extern std::ostream *pdaReportStream;
+extern long pdaReportFilterState;
+extern const char *pdaReportFilterToken;
+extern bool syntaxOnly;
+extern bool warnGrammar;
+extern bool dumpGlobals;
+extern bool dumpSql;
+extern long dumpSqlGrammarId;
+extern const char *inputFn;
+extern bool dumpLexer;
+extern bool dumpRegions;
+extern bool dumpCst;
 extern bool branchPointInfo;
 extern bool verbose, logging;
 extern bool addUniqueEmptyProductions;
@@ -55,7 +70,7 @@ extern char startDefName[];
 /* Error reporting. */
 std::ostream &error();
 std::ostream &error( int first_line, int first_column );
-std::ostream &warning( ); 
+std::ostream &warning( );
 std::ostream &warning( int first_line, int first_column );
 
 extern std::ostream *outStream;
@@ -81,7 +96,7 @@ extern InputLoc internal;
 const char *locFileName( const InputLoc &loc );
 std::ostream &error();
 std::ostream &error( const InputLoc &loc );
-std::ostream &warning( const InputLoc &loc ); 
+std::ostream &warning( const InputLoc &loc );
 
 void scan( char *fileName, std::istream &input, std::ostream &output );
 void terminateAllParsers( );

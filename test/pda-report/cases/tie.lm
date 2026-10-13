@@ -1,0 +1,18 @@
+# Dangling else with `then` and `else` at the *same* level and no associativity:
+# this is the level-only tie that must stay visible as an UNRESOLVED conflict.
+lex
+	literal `if `then `else `x
+	ignore / [ \t\n\r]+ /
+end
+
+precedence `then , `else
+
+def start
+	[ stmt ]
+
+def stmt
+	[ `if stmt `then stmt ]
+  | [ `if stmt `then stmt `else stmt ]
+  | [ `x ]
+
+parse C: start[stdin]

@@ -113,7 +113,7 @@ tree_t **vm_bs_pop( program_t *prg, tree_t **sp, int n )
 			 * creation of the first stack block. */
 			return prg->sb_end;
 		}
-	
+
 		/* Clear any previous reserve. We are going to save this block as the
 		 * reserve. */
 		if ( prg->reserve != 0 ) {
@@ -129,7 +129,7 @@ tree_t **vm_bs_pop( program_t *prg, tree_t **sp, int n )
 		/* Setup the bounds. Note that we restore the full block, which is
 		 * necessary to honour any CONTIGUOUS statements that counted on it
 		 * before a subsequent CONTIGUOUS triggered a new block. */
-		prg->sb_beg = prg->stack_block->data; 
+		prg->sb_beg = prg->stack_block->data;
 		prg->sb_end = prg->stack_block->data + prg->stack_block->len;
 
 		/* Update the total stack usage. */
@@ -145,7 +145,7 @@ void vm_clear( program_t *prg )
 	while ( prg->stack_block != 0 ) {
 		struct stack_block *b = prg->stack_block;
 		prg->stack_block = prg->stack_block->next;
-		
+
 		free( b->data );
 		free( b );
 	}
@@ -182,6 +182,10 @@ program_t *colm_new_program( struct colm_sections *rtd )
 	prg->rtd = rtd;
 	prg->ctx_dep_parsing = 1;
 	prg->reduce_clean = 1;
+	prg->dump_lexer = 0;
+	prg->dump_parse = 0;
+	prg->dump_cst = 0;
+	prg->dump_cst_filter = 0;
 
 	init_pool_alloc( &prg->kid_pool, sizeof(kid_t) );
 	init_pool_alloc( &prg->tree_pool, sizeof(tree_t) );

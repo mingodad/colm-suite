@@ -1,0 +1,9 @@
+lex
+	literal `+
+	ignore / [ \t\n]+ /
+end
+
+def start
+	[ `+ `* ]
+
+parse P: start[ stdin ]

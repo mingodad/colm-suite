@@ -1,0 +1,7 @@
+
+=== CONFLICTS (raw: 1 shift/reduce, 0 reduce/reduce; remaining: 1 shift/reduce, 0 reduce/reduce) ===
+
+state 8  shift/reduce  reduce stmt-0 | shift 9  [UNRESOLVED level-only tie] (runtime first-tries reduce stmt-0, then retries)
+tokens(1): `else
+
+conflicts: 1 shift/reduce, 0 reduce/reduce over 1 conflict entries, 0 resolved (0 by level, 0 by assoc, 0 nonassoc->error), 1 level-only ties, 1 remaining (1 shift/reduce, 0 reduce/reduce)

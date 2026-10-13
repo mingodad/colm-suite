@@ -53,7 +53,7 @@ tree_t *construct_string( program_t *prg, head_t *s )
 }
 
 
-/* 
+/*
  * In this system strings are not null terminated. Often strings come from a
  * parse, in which case the string is just a pointer into the the data stream.
  * A block in a parsed stream can hold many tokens and there is no room
@@ -183,7 +183,7 @@ head_t *string_to_upper( head_t *s )
 	int i;
 	for ( i = 0; i < len; i++ )
 		*dst++ = toupper( *src++ );
-		
+
 	return head;
 }
 
@@ -199,7 +199,7 @@ head_t *string_to_lower( head_t *s )
 	int i;
 	for ( i = 0; i < len; i++ )
 		*dst++ = tolower( *src++ );
-		
+
 	return head;
 }
 
@@ -243,7 +243,7 @@ word_t str_atoo( head_t *str )
 head_t *int_to_str( program_t *prg, word_t i )
 {
 	char data[20];
-	sprintf( data, "%ld", i );
+	snprintf( data, sizeof(data), "%ld", i );
 	return string_alloc_full( prg, data, strlen(data) );
 }
 

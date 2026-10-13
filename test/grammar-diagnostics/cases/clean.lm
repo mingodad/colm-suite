@@ -1,0 +1,16 @@
+# A grammar that should produce no grammar diagnostics at all: every def is
+# reachable and productive, no duplicates.
+
+lex
+	literal `n `b
+	ignore / [ \t\n\r]+ /
+end
+
+def start
+	[ exp ]
+
+def exp
+	[ `n ]
+|	[ `b ]
+
+parse C: start[stdin]

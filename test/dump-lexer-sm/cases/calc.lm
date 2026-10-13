@@ -1,0 +1,16 @@
+lex
+	token INTEGER / [0-9]+ /
+	literal `+ `* `( `)
+	ignore / [ \t\n]+ /
+end
+
+def start
+	[ exp ]
+
+def exp
+	[ exp `+ exp ]
+  | [ exp `* exp ]
+  | [ `( exp `) ]
+  | [ INTEGER ]
+
+parse P: start[ stdin ]

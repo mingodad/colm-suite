@@ -34,8 +34,10 @@ void fatal( const char *fmt, ... );
 
 #ifdef DEBUG
 #define debug( prg, realm, ... ) _debug( prg, realm, __VA_ARGS__ )
+#define check_realm( realm ) _check_realm( realm )
 #else
 #define debug( prg, realm, ... ) 
+#define check_realm( realm ) 
 #endif
 
 int _debug( struct colm_program *prg, long realm, const char *fmt, ... );

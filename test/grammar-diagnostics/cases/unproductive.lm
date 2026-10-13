@@ -1,0 +1,14 @@
+# `loop` is reachable but can never derive a terminal string: D3.
+
+lex
+	literal `n
+	ignore / [ \t\n\r]+ /
+end
+
+def start
+	[ loop ]
+
+def loop
+	[ loop ]
+
+parse C: start[stdin]

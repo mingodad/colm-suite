@@ -38,7 +38,7 @@
 #include <colm/struct.h>
 
 DEF_INPUT_FUNCS( input_funcs_seq, input_impl_seq );
-static struct input_funcs_seq input_funcs;
+extern struct input_funcs_seq input_funcs;
 
 static bool is_tree( struct seq_buf *b )
 {
@@ -78,8 +78,23 @@ static struct seq_buf *new_seq_buf()
 }
 
 static void input_transfer_loc( struct colm_program *prg, location_t *loc,
-		struct input_impl_seq *ss )
+		struct input_impl_seq *si )
 {
+	/* Delegate to the stream that will supply the next byte. In-memory
+	 * buffers holding pending tokens (SB_TOKEN/SB_IGNORE) have no source
+	 * location of their own, so in that case the location is left unset,
+	 * matching the previous behaviour. */
+	struct seq_buf *buf = si->queue.head;
+	while ( buf != 0 ) {
+		if ( is_stream( buf ) ) {
+			struct stream_impl *sub = buf->si;
+			sub->funcs->transfer_loc( prg, loc, sub );
+			return;
+		}
+		else if ( buf->type == SB_TOKEN || buf->type == SB_IGNORE )
+			return;
+		buf = buf->next;
+	}
 }
 
 static bool call_destructor( struct seq_buf *buf )
@@ -770,7 +785,7 @@ static tree_t *input_undo_append_stream( struct colm_program *prg, tree_t **sp,
 	return 0;
 }
 
-static struct input_funcs_seq input_funcs =
+struct input_funcs_seq input_funcs =
 {
 	&input_get_parse_block,
 	&input_get_data,

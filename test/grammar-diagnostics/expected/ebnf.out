@@ -1,0 +1,5 @@
+warning: EBNF '?' on nullable 'nul' has no effect ('nul' can already derive the empty string)
+warning: EBNF '*' on nullable 'nul' has no effect ('nul' can already derive the empty string)
+warning: EBNF '+' on nullable 'nul' has no effect ('nul' can already derive the empty string)
+grammar: 0 unreachable, 0 unproductive, 0 duplicate, 0 subsumed, 3 ebnf-redundant
+conflicts: 13 shift/reduce, 21 reduce/reduce over 17 conflict entries, 0 resolved (0 by level, 0 by assoc, 0 nonassoc->error), 0 level-only ties, 34 remaining (13 shift/reduce, 21 reduce/reduce)

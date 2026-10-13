@@ -30,6 +30,7 @@
 #include <assert.h>
 #include <iostream>
 
+#include "parsetree.h"
 #include "pdacodegen.h"
 #include "fsmcodegen.h"
 #include "colm.h"
@@ -133,7 +134,7 @@ void makeFsmKeyArray( Key *result, char *data, int len, Compiler *pd )
 
 /* Like makeFsmKeyArray except the result has only unique keys. They ordering
  * will be changed. */
-void makeFsmUniqueKeyArray( KeySet &result, char *data, int len, 
+void makeFsmUniqueKeyArray( KeySet &result, char *data, int len,
 		bool caseInsensitive, Compiler *pd )
 {
 	for ( int si = 0; si < len; si++ ) {
@@ -267,7 +268,7 @@ FsmAp *makeBuiltin( BuiltinMachine builtin, Compiler *pd )
 /* Initialize the structure that will collect info during the parse of a
  * machine. */
 Compiler::Compiler( )
-:	
+:
 	fsmGbl(new FsmGbl),
 	fsmCtx(new FsmCtx( fsmGbl )),
 	actionList(fsmCtx->actionList),
@@ -325,6 +326,15 @@ Compiler::Compiler( )
 	reducer(0),
 	predValue(0),
 	nextMatchEndNum(0),
+	pdaShiftReduceConflicts(0),
+	pdaReduceReduceConflicts(0),
+	pdaResolvedConflicts(0),
+	pdaRemainingShiftReduce(0),
+	pdaRemainingReduceReduce(0),
+	pdaPrecedenceTies(0),
+	pdaResolvedByLevel(0),
+	pdaResolvedByAssoc(0),
+	pdaResolvedNonassoc(0),
 	argvTypeRef(0),
 	inContiguous(false),
 	contiguousOffset(0),
@@ -494,7 +504,7 @@ void Compiler::finishGraphBuild( FsmAp *graph )
 	/* Transfer global error actions. */
 	for ( StateList::Iter state = graph->stateList; state.lte(); state++ )
 		graph->transferErrorActions( state, 0 );
-	
+
 	graph->removeActionDups();
 
 	/* Remove unreachable states. There should be no dead end states. The
@@ -787,9 +797,9 @@ Namespace *NamespaceQual::getQual( Compiler *pd )
 	/* Do the search only once. */
 	if ( cachedNspaceQual != 0 )
 		return cachedNspaceQual;
-	
+
 	if ( qualNames.length() == 0 ) {
-		/* No qualification, use the region the qualification was 
+		/* No qualification, use the region the qualification was
 		 * declared in. */
 		cachedNspaceQual = declInNspace;
 	}
@@ -869,7 +879,7 @@ void Compiler::initEmptyScanners()
 	}
 }
 
-pda_run *Compiler::parsePattern( program_t *prg, tree_t **sp, const InputLoc &loc, 
+pda_run *Compiler::parsePattern( program_t *prg, tree_t **sp, const InputLoc &loc,
 		int parserId, struct input_impl *sourceStream )
 {
 	struct pda_run *pdaRun = new pda_run;
@@ -904,6 +914,7 @@ void Compiler::parsePatterns()
 
 	/* Turn off context-dependent parsing. */
 	prg->ctx_dep_parsing = 0;
+	prg->dump_lexer = dumpLexer;
 
 	tree_t **sp = prg->stack_root;
 
@@ -960,6 +971,321 @@ void Compiler::collectParserEls( BstSet<LangEl*> &parserEls )
 	}
 }
 
+/* Two alternatives are the same production if their right-hand sides are the
+ * same sequence of language elements. Capture fields and reduction actions
+ * are deliberately ignored: an identical RHS is a duplicate whichever action
+ * is attached. */
+static bool sameProductionRhs( Production *a, Production *b )
+{
+	ProdEl *ea = a->prodElList != 0 ? a->prodElList->head : 0;
+	ProdEl *eb = b->prodElList != 0 ? b->prodElList->head : 0;
+	while ( ea != 0 && eb != 0 ) {
+		if ( ea->langEl != eb->langEl )
+			return false;
+		ea = ea->next;
+		eb = eb->next;
+	}
+	return ea == 0 && eb == 0;
+}
+
+/* If a production is a unit production `A -> B` (exactly one symbol on the
+ * right-hand side and it is a non-terminal), return B; otherwise 0. */
+static LangEl *unitProductionTarget( Production *prod )
+{
+	if ( prod->prodElList == 0 )
+		return 0;
+	ProdEl *el = prod->prodElList->head;
+	if ( el == 0 || el->next != 0 )
+		return 0;
+	LangEl *to = el->langEl;
+	if ( to == 0 || to->type != LangEl::NonTerm )
+		return 0;
+	return to;
+}
+
+/*
+ * Static grammar diagnostics: unreachable non-terminals, unproductive
+ * (non-deriving) non-terminals, and duplicate productions. These are purely
+ * structural checks over the resolved grammar, independent of the PDA, and run
+ * on every compile. They only ever write to stderr; generated code is
+ * unaffected.
+ *
+ * This is deliberately NOT a guarantee that a reduction can never win at
+ * runtime. That question depends on the PDA's action order and the retry loop
+ * and is input-dependent; see GRAMMAR_DIAGNOSTICS_TASK.md section 3.2.
+ */
+void Compiler::reportGrammarDiagnostics( LangElSet &parserEls )
+{
+	if ( gblErrorCount > 0 )
+		return;
+
+	/* --no-warn-grammar disables the whole pass. */
+	if ( !warnGrammar )
+		return;
+
+	/* The PDA report owns the report stream (stderr by default); keep the
+	 * machine-readable JSON pure and the text report free of interleaving. */
+	if ( pdaReportMode != PdaReportOff )
+		return;
+
+	/* Reachability: BFS from the parse roots through production right-hand
+	 * sides. */
+	LangElVect queue;
+	LangElSet reachable;
+	long nRoots = 0;
+	for ( LangElSet::Iter pe = parserEls; pe.lte(); pe++ ) {
+		nRoots++;
+		if ( reachable.insert( *pe ) != 0 )
+			queue.append( *pe );
+	}
+
+	/* A translation unit with no parse roots of its own is a library-style
+	 * include (for example src/colm/colm.lm). Every non-terminal would look
+	 * unreachable, which is not actionable, so leave that check off. */
+	bool reportUnreachable = nRoots > 0;
+
+	for ( long qi = 0; qi < queue.length(); qi++ ) {
+		LangEl *lel = queue[qi];
+		for ( LelProdList::Iter prod = lel->prodList; prod.lte(); prod++ ) {
+			if ( prod->prodElList == 0 )
+				continue;
+			for ( ProdElList::Iter el = *prod->prodElList; el.lte(); el++ ) {
+				LangEl *to = el->langEl;
+				if ( to != 0 && to->type == LangEl::NonTerm &&
+						reachable.insert( to ) != 0 )
+					queue.append( to );
+			}
+		}
+	}
+
+	/* Productivity: a non-terminal is productive if it has some production
+	 * whose right-hand side is all terminals or already-productive
+	 * non-terminals. Iterate to a fixed point. */
+	LangElSet productive;
+	bool changed = true;
+	while ( changed ) {
+		changed = false;
+		for ( LelList::Iter lel = langEls; lel.lte(); lel++ ) {
+			if ( lel->type != LangEl::NonTerm || productive.find( lel ) != 0 )
+				continue;
+			for ( LelProdList::Iter prod = lel->prodList; prod.lte(); prod++ ) {
+				bool ok = true;
+				if ( prod->prodElList != 0 ) {
+					for ( ProdElList::Iter el = *prod->prodElList; el.lte(); el++ ) {
+						LangEl *to = el->langEl;
+						if ( to != 0 && to->type == LangEl::NonTerm &&
+								productive.find( to ) == 0 ) {
+							ok = false;
+							break;
+						}
+					}
+				}
+				if ( ok ) {
+					productive.insert( lel );
+					changed = true;
+					break;
+				}
+			}
+		}
+	}
+
+	/* Nullability: a non-terminal is nullable if some production has an empty
+	 * right-hand side or one whose symbols are all already-nullable
+	 * non-terminals. Iterate to a fixed point. Used by the EBNF check below. */
+	LangElSet nullable;
+	changed = true;
+	while ( changed ) {
+		changed = false;
+		for ( LelList::Iter lel = langEls; lel.lte(); lel++ ) {
+			if ( lel->type != LangEl::NonTerm || nullable.find( lel ) != 0 )
+				continue;
+			for ( LelProdList::Iter prod = lel->prodList; prod.lte(); prod++ ) {
+				bool ok = true;
+				if ( prod->prodElList != 0 ) {
+					for ( ProdElList::Iter el = *prod->prodElList; el.lte(); el++ ) {
+						LangEl *to = el->langEl;
+						if ( to == 0 )
+							continue;
+						if ( to->type != LangEl::NonTerm ||
+								nullable.find( to ) == 0 ) {
+							ok = false;
+							break;
+						}
+					}
+				}
+				if ( ok ) {
+					nullable.insert( lel );
+					changed = true;
+					break;
+				}
+			}
+		}
+	}
+
+	int nUnreachable = 0, nUnproductive = 0, nDuplicate = 0, nSubsumed = 0;
+	int nRedundantEbnf = 0;
+
+	/* Unit closure: for each non-terminal, the set of non-terminals reachable
+	 * from it through unit productions `A -> B`. Used to detect alternatives
+	 * like `X -> B` that are already covered by `X -> C` when B is reachable
+	 * from C. Computed once for the whole grammar. */
+	BstMap<LangEl*, LangElSet*> unitClosure;
+	for ( LelList::Iter lel = langEls; lel.lte(); lel++ ) {
+		if ( lel->type != LangEl::NonTerm )
+			continue;
+		LangElSet *cl = new LangElSet;
+		LangElVect stack;
+		BstSet<LangEl*> seen;
+		stack.append( lel );
+		seen.insert( lel );
+		for ( long si = 0; si < stack.length(); si++ ) {
+			LangEl *cur = stack[si];
+			for ( LelProdList::Iter p = cur->prodList; p.lte(); p++ ) {
+				LangEl *to = unitProductionTarget( p );
+				if ( to != 0 && seen.insert( to ) != 0 ) {
+					cl->insert( to );
+					stack.append( to );
+				}
+			}
+		}
+		unitClosure.insert( lel, cl );
+	}
+
+	for ( LelList::Iter lel = langEls; lel.lte(); lel++ ) {
+		if ( lel->type != LangEl::NonTerm )
+			continue;
+		if ( lel == noTokenLangEl || lel == eofLangEl || lel == errorLangEl ||
+				lel == anyLangEl || lel == rootLangEl )
+			continue;
+		/* EBNF sugar elements are reported through their parent. */
+		if ( lel->isRepeat || lel->isList || lel->isOpt )
+			continue;
+
+		bool isReachable = reachable.find( lel ) != 0;
+		bool isProductive = productive.find( lel ) != 0;
+
+		Production *first = lel->prodList.head;
+
+		if ( !isReachable ) {
+			if ( !reportUnreachable )
+				continue;
+			if ( inputFn != 0 ) {
+				if ( first != 0 && first->loc.line >= 0 )
+					warning( first->loc ) << "non-terminal '" << lel->name
+							<< "' is unreachable (not used by any parse rule)" << endl;
+				else
+					warning() << "non-terminal '" << lel->name
+							<< "' is unreachable (not used by any parse rule)" << endl;
+			}
+			nUnreachable++;
+			continue;
+		}
+
+		if ( !isProductive ) {
+			if ( inputFn != 0 ) {
+				if ( first != 0 && first->loc.line >= 0 )
+					warning( first->loc ) << "non-terminal '" << lel->name
+							<< "' cannot derive any terminal string" << endl;
+				else
+					warning() << "non-terminal '" << lel->name
+							<< "' cannot derive any terminal string" << endl;
+			}
+			nUnproductive++;
+			continue;
+		}
+
+		/* Duplicate alternatives: identical right-hand sides. */
+		Vector<Production*> alts;
+		for ( LelProdList::Iter p = lel->prodList; p.lte(); p++ )
+			alts.append( p );
+		for ( long ai = 0; ai < alts.length(); ai++ ) {
+			for ( long aj = ai + 1; aj < alts.length(); aj++ ) {
+				if ( sameProductionRhs( alts[ai], alts[aj] ) ) {
+					Production *p1 = alts[ai], *p2 = alts[aj];
+					if ( inputFn != 0 )
+						warning( p2->loc ) << "duplicate production for '" << lel->name
+								<< "' (same as the rule at " << p1->loc.fileName << ":"
+								<< p1->loc.line << ")" << endl;
+					nDuplicate++;
+				}
+			}
+		}
+
+		/* Unit-subsumed alternatives. If `X -> B` and `X -> C` are both unit
+		 * productions and B is reachable from C through unit productions, then
+		 * the `X -> B` alternative is already covered by `X -> C`. */
+		for ( long ai = 0; ai < alts.length(); ai++ ) {
+			LangEl *b = unitProductionTarget( alts[ai] );
+			if ( b == 0 )
+				continue;
+			for ( long aj = 0; aj < alts.length(); aj++ ) {
+				if ( aj == ai )
+					continue;
+				LangEl *c = unitProductionTarget( alts[aj] );
+				if ( c == 0 || c == b )
+					continue;
+				BstMapEl<LangEl*, LangElSet*> *cEl = unitClosure.find( c );
+				if ( cEl == 0 || cEl->value->find( b ) == 0 )
+					continue;
+				/* Mutual reachability is a unit cycle, not a subsumption. */
+				BstMapEl<LangEl*, LangElSet*> *bEl = unitClosure.find( b );
+				if ( bEl != 0 && bEl->value->find( c ) != 0 )
+					continue;
+				if ( inputFn != 0 )
+					warning( alts[ai]->loc ) << "alternative '" << lel->name
+							<< " -> " << b->name << "' is subsumed by '" << lel->name
+							<< " -> " << c->name << "' (" << b->name
+							<< " is reachable from " << c->name
+							<< " through unit productions)" << endl;
+				nSubsumed++;
+				break;
+			}
+		}
+	}
+
+	/* EBNF sugar applied to an already-nullable operand. `X?` is exactly `X`
+	 * when X is nullable, and `X*`/`X+` can derive the empty string in
+	 * unboundedly many ways; all are ambiguous and usually a mistake. The
+	 * generated element records its operand in `repeatOf`; report at the
+	 * sugar site when the generated production carries a location (the opt and
+	 * list builders do), otherwise at the operand's own definition. */
+	for ( LelList::Iter lel = langEls; lel.lte(); lel++ ) {
+		if ( !(lel->isRepeat || lel->isList || lel->isOpt) )
+			continue;
+		if ( reachable.find( lel ) == 0 )
+			continue;
+		LangEl *op = lel->repeatOf;
+		if ( op == 0 || op->type != LangEl::NonTerm )
+			continue;
+		if ( nullable.find( op ) == 0 )
+			continue;
+
+		const char *opname = lel->isOpt ? "?" : ( lel->isList ? "+" : "*" );
+		Production *ebnfFirst = lel->prodList.head;
+		Production *opFirst = op->prodList.head;
+		bool haveLoc = ebnfFirst != 0 && ebnfFirst->loc.line >= 0;
+		if ( inputFn != 0 && ( haveLoc || ( opFirst != 0 && opFirst->loc.line >= 0 ) ) ) {
+			const InputLoc &loc = haveLoc ? ebnfFirst->loc : opFirst->loc;
+			warning( loc ) << "EBNF '" << opname << "' on nullable '"
+					<< op->name << "' has no effect ('" << op->name
+					<< "' can already derive the empty string)" << endl;
+		}
+		else
+			warning() << "EBNF '" << opname << "' on nullable '" << op->name
+					<< "' has no effect" << endl;
+		nRedundantEbnf++;
+	}
+
+	if ( nUnreachable != 0 || nUnproductive != 0 || nDuplicate != 0 ||
+			nSubsumed != 0 || nRedundantEbnf != 0 ) {
+		cerr << "grammar: " << nUnreachable << " unreachable, "
+				<< nUnproductive << " unproductive, "
+				<< nDuplicate << " duplicate, "
+				<< nSubsumed << " subsumed, "
+				<< nRedundantEbnf << " ebnf-redundant" << endl;
+	}
+}
+
 void Compiler::writeHostCall()
 {
 	/*
@@ -980,7 +1306,7 @@ void Compiler::writeHostCall()
 		"{\n"
 		"	value_t rtn = 0;\n"
 		"	switch ( code ) {\n";
-	
+
 	for ( FunctionList::Iter hc = inHostList; hc.lte(); hc++ ) {
 		*outStream <<
 			"		case " << hc->funcId << ": {\n";
@@ -990,7 +1316,7 @@ void Compiler::writeHostCall()
 			*outStream <<
 				"			value_t p" << pos << " = vm_pop_value();\n";
 		}
-		
+
 		*outStream <<
 			"			rtn = " << hc->hostCall << "( prg, sp";
 
@@ -1003,7 +1329,7 @@ void Compiler::writeHostCall()
 			"			break;\n"
 			"		}\n";
 	}
-		
+
 	*outStream <<
 		"	}\n"
 		"	vm_push_value( rtn );\n"
@@ -1034,10 +1360,30 @@ void Compiler::generateOutput( long activeRealm, bool includeCommit )
 	if ( includeCommit )
 		writeCommitStub();
 
-	if ( !gblLibrary ) 
+	if ( !gblLibrary )
 		fsmGen->writeMain( activeRealm );
 
 	outStream->flush();
+
+	if ( outLexSmStream ) {
+		fsmGen->writeDebugFsm(*outLexSmStream);
+		outLexSmStream->flush();
+	}
+}
+
+/* Write the reduced lexer FSM without generating any code. Used by
+ * --dump-lexer-sm together with --syntax-only, where generateOutput (and with
+ * it the only other call to writeDebugFsm) is skipped. The reducer and the
+ * scanner tables are already built by compile(), so the reduced FSM is
+ * available. Generated code is written to a sink and discarded. */
+void Compiler::dumpLexerSm()
+{
+	ostringstream sink;
+	FsmCodeGen *fsmGen = new FsmCodeGen( reducer, sink, fsmTables );
+	fsmGen->genAnalysis();
+	fsmGen->writeDebugFsm( *outLexSmStream );
+	outLexSmStream->flush();
+	delete fsmGen;
 }
 
 
@@ -1060,7 +1406,7 @@ void Compiler::prepGrammar()
 
 	makeProdFsms();
 
-	/* Allocate the Runtime data now. Every PdaTable that we make 
+	/* Allocate the Runtime data now. Every PdaTable that we make
 	 * will reference it, but it will be filled in after all the tables are
 	 * built. */
 	runtimeData = new colm_sections;
@@ -1108,6 +1454,8 @@ void Compiler::compile()
 	BstSet<LangEl*> parserEls;
 	collectParserEls( parserEls );
 
+	reportGrammarDiagnostics( parserEls );
+
 	makeParser( parserEls );
 
 	/* Make the scanner tables. */
@@ -1116,11 +1464,628 @@ void Compiler::compile()
 	/* Now that all parsers are built, make the global runtimeData. */
 	makeRuntimeData();
 
-	/* 
+	/*
 	 * All compilation is now complete.
 	 */
-	
+
 	/* Parse constructors and patterns. */
 	parsePatterns();
 }
 
+int Compiler::execute()
+{
+    compile();
+
+    if ( gblErrorCount > 0 )
+        return 1;
+
+    return executeScanner();
+}
+
+int Compiler::executeScanner()
+{
+    return 0;
+}
+
+void Compiler::dumpRepeatType( const RepeatType repeatType )
+{
+	switch ( repeatType ) {
+		case RepeatNone:
+			break;
+
+		case RepeatRepeat:
+			cerr << " repeat";
+			break;
+
+		case RepeatList:
+			cerr << " list";
+			break;
+
+		case RepeatOpt:
+			cerr << " optional";
+			break;
+
+		case RepeatLeftRepeat:
+			cerr << " left-repeat";
+			break;
+
+		case RepeatLeftList:
+			cerr << " left-list";
+			break;
+
+		default:
+			cerr << " <repeat>";
+			break;
+	}
+}
+
+void Compiler::dumpNamespaceQual( const NamespaceQual *nspaceQual )
+{
+	if ( nspaceQual == 0 )
+		return;
+
+	for ( StringVect::Iter it = nspaceQual->qualNames;
+			it.lte(); it++ ) {
+		cerr << *it << "::";
+	}
+}
+
+void Compiler::dumpIterType( const IterDef *iterDef )
+{
+	if ( iterDef == 0 ) {
+		cerr << "iter";
+		return;
+	}
+
+	switch ( iterDef->type ) {
+		case IterDef::Tree:
+			cerr << "iter_tree";
+			break;
+
+		case IterDef::Child:
+			cerr << "iter_child";
+			break;
+
+		case IterDef::RevChild:
+			cerr << "iter_revchild";
+			break;
+
+		case IterDef::Repeat:
+			cerr << "iter_repeat";
+			break;
+
+		case IterDef::RevRepeat:
+			cerr << "iter_revrepeat";
+			break;
+
+		case IterDef::User:
+			cerr << "iter_user";
+			if ( iterDef->func != 0 ) {
+				cerr << "(" << iterDef->func->name << ")";
+			}
+			break;
+
+		case IterDef::ListEl:
+			cerr << "iter_list_el";
+			break;
+
+		case IterDef::RevListVal:
+			cerr << "iter_rev_list_val";
+			break;
+
+		case IterDef::MapEl:
+			cerr << "iter_map_el";
+			break;
+
+		case IterDef::WithIgnore:
+			cerr << "iter_with_ignore";
+			break;
+
+		default:
+			cerr << "iter";
+			break;
+	}
+}
+
+void Compiler::dumpGenericType( const GenericType *generic )
+{
+	if ( generic == 0 ) {
+		cerr << "generic";
+		return;
+	}
+
+	/*
+	 * GenericType itself is the runtime declaration. The resolved
+	 * semantic type is represented by its element/key/value UniqueTypes.
+	 */
+	if ( generic->keyUt != 0 ) {
+		cerr << "map<";
+		dumpType( generic->keyUt );
+		cerr << ", ";
+		dumpType( generic->valueUt );
+		cerr << ">";
+	}
+	else if ( generic->elUt != 0 ) {
+		cerr << "list<";
+		dumpType( generic->elUt );
+		cerr << ">";
+	}
+	else {
+		cerr << "generic";
+	}
+}
+
+void Compiler::dumpType( const UniqueType *ut )
+{
+	if ( ut == 0 ) {
+		cerr << "?";
+		return;
+	}
+
+	switch ( ut->typeId ) {
+		case TYPE_NOTYPE:
+			cerr << "notype";
+			break;
+
+		case TYPE_NIL:
+			cerr << "nil";
+			break;
+
+		case TYPE_TREE:
+			if ( ut->langEl != 0 )
+				cerr << ut->langEl->name;
+			else
+				cerr << "tree";
+			break;
+
+		case TYPE_REF:
+			cerr << "ref";
+			break;
+
+		case TYPE_ITER:
+			dumpIterType( ut->iterDef );
+			break;
+
+		case TYPE_STRUCT:
+			if ( ut->structEl != 0 )
+				cerr << ut->structEl->name;
+			else
+				cerr << "struct";
+			break;
+
+		case TYPE_GENERIC:
+			dumpGenericType( ut->generic );
+			break;
+
+		case TYPE_INT:
+			cerr << "int";
+			break;
+
+		case TYPE_BOOL:
+			cerr << "bool";
+			break;
+
+		case TYPE_LIST_PTRS:
+			cerr << "list_ptrs";
+			break;
+
+		case TYPE_MAP_PTRS:
+			cerr << "map_ptrs";
+			break;
+
+		case TYPE_VOID:
+			cerr << "void";
+			break;
+
+		default:
+			cerr << "<unknown-type:"
+				<< (int)ut->typeId << ">";
+			break;
+	}
+}
+
+void Compiler::dumpUniqueType( const UniqueType *ut )
+{
+	if ( ut == 0 ) {
+		cerr << "?";
+		return;
+	}
+
+	switch ( ut->typeId ) {
+		case TYPE_NOTYPE:
+			cerr << "<notype>";
+			break;
+
+		case TYPE_NIL:
+			cerr << "nil";
+			break;
+
+		case TYPE_TREE:
+			if ( ut->langEl != 0 )
+				cerr << ut->langEl->name;
+			else
+				cerr << "tree";
+			break;
+
+		case TYPE_REF:
+			cerr << "ref";
+			break;
+
+		case TYPE_ITER:
+			cerr << "iter";
+			break;
+
+		case TYPE_STRUCT:
+			cerr << "struct";
+
+			if ( ut->structEl != 0 ) {
+				cerr << " " << ut->structEl->name;
+			}
+			break;
+
+		case TYPE_GENERIC:
+			cerr << "generic";
+
+			if ( ut->generic != 0 ) {
+				cerr << " ";
+				dumpGeneric( *ut->generic );
+			}
+			break;
+
+		case TYPE_INT:
+			cerr << "int";
+			break;
+
+		case TYPE_BOOL:
+			cerr << "bool";
+			break;
+
+		case TYPE_LIST_PTRS:
+			cerr << "list_ptrs";
+			break;
+
+		case TYPE_MAP_PTRS:
+			cerr << "map_ptrs";
+			break;
+
+		case TYPE_VOID:
+			cerr << "void";
+			break;
+
+		default:
+			cerr << "<unknown-type:" << ut->typeId << ">";
+			break;
+	}
+}
+
+void Compiler::dumpTypeRef( const TypeRef *tr )
+{
+	if ( tr == 0 ) {
+		cerr << "?";
+		return;
+	}
+
+	if ( tr->uniqueType != 0 ) {
+		dumpType( tr->uniqueType );
+		return;
+	}
+
+	/*
+	 * The compiler normally resolves TypeRefs before we get here.
+	 * Keep a structural fallback so dumpGlobals remains useful if
+	 * a declaration has not been resolved.
+	 */
+	switch ( tr->type ) {
+		case TypeRef::Unspecified:
+			cerr << "?";
+			break;
+
+		case TypeRef::Name:
+			dumpNamespaceQual( tr->nspaceQual );
+			cerr << tr->typeName;
+			dumpRepeatType( tr->repeatType );
+			break;
+
+		case TypeRef::Literal:
+			cerr << "<literal>";
+			break;
+
+		case TypeRef::Iterator:
+			if ( tr->iterDef != 0 )
+				dumpIterType( tr->iterDef );
+			else
+				cerr << "iter";
+			break;
+
+		case TypeRef::List:
+			cerr << "list<";
+			dumpTypeRef( tr->typeRef1 );
+			cerr << ">";
+			break;
+
+		case TypeRef::ListPtrs:
+			cerr << "list_ptrs<";
+			dumpTypeRef( tr->typeRef1 );
+			cerr << ">";
+			break;
+
+		case TypeRef::ListEl:
+			cerr << "list_el<";
+			dumpTypeRef( tr->typeRef1 );
+			cerr << ">";
+			break;
+
+		case TypeRef::Map:
+			cerr << "map<";
+			dumpTypeRef( tr->typeRef1 );
+			cerr << ", ";
+			dumpTypeRef( tr->typeRef2 );
+			cerr << ">";
+			break;
+
+		case TypeRef::MapEl:
+			cerr << "map_el<";
+			dumpTypeRef( tr->typeRef1 );
+			cerr << ", ";
+			dumpTypeRef( tr->typeRef2 );
+			cerr << ">";
+			break;
+
+		case TypeRef::MapPtrs:
+			cerr << "map_ptrs<";
+			dumpTypeRef( tr->typeRef1 );
+			cerr << ", ";
+			dumpTypeRef( tr->typeRef2 );
+			cerr << ">";
+			break;
+
+		case TypeRef::Parser:
+			cerr << "parser<";
+			dumpTypeRef( tr->typeRef1 );
+			cerr << ">";
+			break;
+
+		case TypeRef::Ref:
+			cerr << "&";
+			dumpTypeRef( tr->typeRef1 );
+			break;
+
+		default:
+			cerr << "<unknown-type-ref>";
+			break;
+	}
+}
+
+void Compiler::dumpField( const ObjectField *field )
+{
+	cerr << field->name;
+
+	if ( field->typeRef != 0 ) {
+		cerr << ": ";
+		dumpTypeRef( field->typeRef );
+	}
+
+	if ( field->isConst )
+		cerr << " const";
+}
+
+void Compiler::dumpMethod( const ObjectMethod *method )
+{
+	cerr << method->name << "(";
+
+	if ( method->paramList != 0 ) {
+		ParameterList::Iter param = *method->paramList;
+
+		for ( long i = 0; i < method->numParams; i++, param++ ) {
+			if ( i != 0 )
+				cerr << ", ";
+
+			cerr << param->name;
+
+			cerr << ": ";
+
+			if ( method->paramUTs != 0 )
+				dumpType( method->paramUTs[i] );
+			else
+				dumpTypeRef( param->typeRef );
+
+			if ( param->type == ObjectField::ParamRefType )
+				cerr << " ref";
+		}
+	} else if ( method->paramUTs ) {
+		for ( long i = 0; i < method->numParams; ++i) {
+			if ( i != 0 )
+				cerr << ", ";
+			cerr << ": ";
+			dumpUniqueType(method->paramUTs[i]);
+		}
+
+	}
+
+	cerr << ")";
+
+	if ( method->returnUT != 0 ) {
+		cerr << ": ";
+		dumpType( method->returnUT );
+	}
+	else if ( method->returnTypeRef != 0 ) {
+		cerr << ": ";
+		dumpTypeRef( method->returnTypeRef );
+	}
+
+	if ( method->isConst )
+		cerr << " const";
+}
+
+void Compiler::dumpStruct( const StructDef &structDef )
+{
+	cerr << structDef.name;
+
+	if ( structDef.objectDef == 0 ) {
+		cerr << "\n";
+		return;
+	}
+
+	cerr << " {\n";
+
+	for ( FieldList::Iter it = structDef.objectDef->fieldList;
+			it.lte(); it++ ) {
+		cerr << "        ";
+		dumpField( it->value );
+		cerr << "\n";
+	}
+
+	cerr << "      }\n";
+}
+
+void Compiler::dumpTypeAlias( const TypeAlias &alias )
+{
+	cerr << alias.name << " = ";
+
+	if ( alias.typeRef != 0 )
+		dumpTypeRef( alias.typeRef );
+	else
+		cerr << "?";
+}
+
+void Compiler::dumpGeneric( const GenericType &generic )
+{
+	if ( generic.keyTr != 0 ) {
+		cerr << "map<";
+		dumpTypeRef( generic.keyTr );
+		cerr << ", ";
+		dumpTypeRef( generic.valueTr );
+		cerr << ">";
+	}
+	else if ( generic.elTr != 0 ) {
+		cerr << "list<";
+		dumpTypeRef( generic.elTr );
+		cerr << ">";
+	}
+	else {
+		cerr << "?";
+	}
+
+	cerr << " [" << generic.typeId << "]";
+}
+
+void Compiler::dumpGlobals()
+{
+	cerr << "Global namespaces:\n";
+
+	for ( NamespaceList::Iter ns = namespaceList; ns.lte(); ns++ ) {
+		cerr << "  " << ns->name << "\n";
+
+		cerr << "    fields:\n";
+		for ( FieldMap::Iter it = ns->rootScope->fieldMap;
+				it.lte(); it++ ) {
+			cerr << "      ";
+			dumpField( it->value );
+			cerr << "\n";
+		}
+
+		cerr << "    methods:\n";
+		for ( MethodMap::Iter it = ns->rootScope->methodMap;
+				it.lte(); it++ ) {
+			cerr << "      ";
+			dumpMethod( it->value );
+			cerr << "\n";
+		}
+
+		cerr << "    structs:\n";
+		for ( StructDefList::Iter it = ns->structDefList;
+				it.lte(); it++ ) {
+			cerr << "      ";
+			dumpStruct( *it );
+		}
+
+		cerr << "    generics:\n";
+		for ( GenericList::Iter it = ns->genericList;
+				it.lte(); it++ ) {
+			cerr << "      ";
+
+			if ( it->keyUt != 0 ) {
+				cerr << "map<";
+				dumpType( it->keyUt );
+				cerr << ", ";
+				dumpType( it->valueUt );
+				cerr << ">";
+			}
+			else if ( it->elUt != 0 ) {
+				cerr << "list<";
+				dumpType( it->elUt );
+				cerr << ">";
+			}
+			else {
+				cerr << "generic";
+			}
+
+			cerr << "\n";
+		}
+
+		cerr << "    aliases:\n";
+		for ( TypeAliasList::Iter it = ns->typeAliasList;
+				it.lte(); it++ ) {
+			cerr << "      ";
+			dumpTypeAlias( *it );
+			cerr << "\n";
+		}
+
+		cerr << "    rl definitions:\n";
+		for ( GraphDict::Iter it = ns->rlMap;
+				it.lte(); it++ ) {
+			cerr << "      " << it->key;
+			if ( it->loc.fileName != 0 && it->loc.fileName[0] != 0 ) {
+				cerr << "  (" << it->loc.fileName << ":"
+					<< it->loc.line << ":" << it->loc.col << ")";
+			}
+			cerr << "\n";
+		}
+	}
+
+	cerr << "Global regions:\n";
+
+	for ( RegionList::Iter it = regionList; it.lte(); it++ ) {
+		cerr << "  " << it->id << ":"
+			<< it->loc.fileName << ":"
+			<< it->loc.line << ":"
+			<< it->loc.col << "\n";
+	}
+
+	cerr << "Global region implementations: "
+		<< regionImplList.length() << "\n";
+
+	cerr << "Global region sets:\n";
+
+	for ( RegionSetList::Iter it = regionSetList; it.lte(); it++ ) {
+		cerr << "  " << it->loc.fileName << ":"
+			<< it->loc.line << ":"
+			<< it->loc.col << "\n";
+	}
+}
+
+void Compiler::dumpRegions()
+{
+	cerr << "regions: " << regionList.length() << "\n";
+
+	for ( RegionList::Iter reg = regionList; reg.lte(); reg++ ) {
+		cerr << "  " << reg->id << ": "
+			<< reg->loc.fileName << ":"
+			<< reg->loc.line << ":"
+			<< reg->loc.col;
+
+		if ( reg->impl->defaultTokenInstance != 0 ) {
+			cerr << " default="
+				<< reg->impl->defaultTokenInstance->tokenDef->name;
+		}
+
+		cerr << "\n    tokens:";
+
+		for ( TokenInstanceListReg::Iter t = reg->impl->tokenInstanceList;
+				t.lte(); t++ ) {
+			cerr << " " << t->tokenDef->name;
+		}
+
+		cerr << "\n";
+	}
+}

@@ -72,10 +72,12 @@ lex
 	token LEFT /'left'/
 	token RIGHT /'right'/
 	token NONASSOC /'nonassoc'/
+	token PRECEDENCE / 'precedence' /
+	token PREC / '%prec' /
 
 	token INCLUDE /'include'/
 
-	token id / 
+	token id /
 		( 'a' .. 'z' | 'A' .. 'Z' | '_' ) .
 		( 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' )*
 	/
@@ -83,7 +85,7 @@ lex
 	token number
 		/ ( '0' .. '9' ) + /
 
-	token backtick_lit / 
+	token backtick_lit /
 		'`' .
 			^( ' ' | '\n' | '\t' ) .
 			^( ' ' | '\n' | '\t' | '`' | ']' )* .
@@ -153,23 +155,23 @@ end
 
 lex
 	token TILDE_NL / '\n' /
-	token tilde_data 
+	token tilde_data
 		/ ( ^'\n' )+ /
 end
 
 lex
-	token lex_id / 
+	token lex_id /
 		( 'a' .. 'z' | 'A' .. 'Z' | '_' ) .
 		( 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' )*
 	/
 
-	token lex_uint 
+	token lex_uint
 		/ ( '0' .. '9' )+ /
 
-	token lex_hex 
+	token lex_hex
 		/ '0x' . ( '0' .. '9' | 'a' .. 'f' | 'A' .. 'F' )+ /
 
-	token lex_lit / 
+	token lex_lit /
 		'\'' . ( ^( '\'' | '\\' ) | '\\' . any )* . ( '\'' | '\'i' ) |
 		'\"' . ( ^( '\"' | '\\' ) | '\\' . any )* . ( '\"' | '\"i' )
 	/
@@ -195,9 +197,9 @@ lex
 	token LEX_COLON_GTGT /':>>'/
 	token LEX_LT_COLON   /'<:'/
 
-	ignore / 
+	ignore /
 		( '\n' | '\t' | ' ' ) .
-		( '\n' | '\t' | ' ' )* 
+		( '\n' | '\t' | ' ' )*
 	/
 
 	ignore / '#' . ( ^'\n' )* . '\n' /
@@ -245,6 +247,7 @@ def pred_type
 	[LEFT] :Left
 |	[RIGHT] :Right
 |	[NONASSOC] :NonAssoc
+|	[PRECEDENCE] :PrecedenceOnly
 
 def pred_token_list
 	[pred_token_list COMMA pred_token] :List
@@ -308,12 +311,12 @@ def opt_export
 |	[]
 
 def function_def
-	[opt_export type_ref id 
+	[opt_export type_ref id
 			POPEN ParamVarDefList: param_var_def_list PCLOSE
 			COPEN lang_stmt_list CCLOSE]
 
 def in_host_def
-	[opt_export type_ref id 
+	[opt_export type_ref id
 			POPEN ParamVarDefList: param_var_def_list PCLOSE
 			EQUALS HostFunc: id]
 
@@ -360,7 +363,7 @@ lex
 		( 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' )*
 	/
 
-	token red_comment / 
+	token red_comment /
 		'//' . ( ^'\n' )* . '\n' |
 		'/*' . any* :> '*/'
 	/
@@ -369,7 +372,7 @@ lex
 		( '\n' | '\t' | ' ' )+
 	/
 
-	token red_lit / 
+	token red_lit /
 		'\'' . ( ^( '\'' | '\\' ) | '\\' . any )* . ( '\'' | '\'i' ) |
 		'\"' . ( ^( '\"' | '\\' ) | '\\' . any )* . ( '\"' | '\"i' )
 	/
@@ -441,14 +444,14 @@ def opt_reduce_first
 |	[]
 
 def cfl_def
-	[DEF id 
-		VarDefList: var_def<* 
+	[DEF id
+		VarDefList: var_def<*
 		opt_reduce_first
 		prod_list]
 
 def cfl_redef
-	[REDEF id 
-		VarDefList: var_def<* 
+	[REDEF id
+		VarDefList: var_def<*
 		opt_reduce_first
 		prod_list]
 
@@ -508,8 +511,13 @@ def opt_prod_name
 	[COLON id] :Name
 |	[]
 
+def opt_prod_prec
+    [PREC pred_token] :Prec
+|   [] :Base
+
 def prod
-	[SQOPEN prod_el_list SQCLOSE 
+	[SQOPEN prod_el_list SQCLOSE
+		opt_prod_prec
 		opt_prod_name
 		opt_commit
 		opt_reduce] :Prod
@@ -524,7 +532,7 @@ def prod_list
 |	[prod] :Base
 
 def case_clause
-	[CASE pattern block_or_single] :Pattern commit 
+	[CASE pattern block_or_single] :Pattern commit
 |	[CASE id block_or_single] :Id commit
 |	[CASE id pattern block_or_single] :IdPat commit
 

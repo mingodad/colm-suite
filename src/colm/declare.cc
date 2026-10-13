@@ -54,12 +54,12 @@ void Compiler::initUniqueTypes( )
 	uniqeTypeMap.insert( uniqueTypeStream );
 }
 
-ObjectMethod *initFunction( UniqueType *retType, Namespace *nspace, ObjectDef *obj, 
+ObjectMethod *initFunction( UniqueType *retType, Namespace *nspace, ObjectDef *obj,
 		ObjectMethod::Type type, const String &name, int methIdWV, int methIdWC,
 		int nargs, UniqueType **args, bool isConst, bool useFnInstr,
 		GenericType *useGeneric )
 {
-	ObjectMethod *objMethod = new ObjectMethod( retType, name, 
+	ObjectMethod *objMethod = new ObjectMethod( retType, name,
 			methIdWV, methIdWC, nargs, args, 0, isConst );
 	objMethod->type = type;
 	objMethod->useFnInstr = useFnInstr;
@@ -77,7 +77,7 @@ ObjectMethod *initFunction( UniqueType *retType, Namespace *nspace, ObjectDef *o
 	return objMethod;
 }
 
-ObjectMethod *initFunction( UniqueType *retType, ObjectDef *obj, 
+ObjectMethod *initFunction( UniqueType *retType, ObjectDef *obj,
 		ObjectMethod::Type type, const String &name, int methIdWV, int methIdWC, bool isConst,
 		bool useFnInstr, GenericType *useGeneric )
 {
@@ -85,7 +85,7 @@ ObjectMethod *initFunction( UniqueType *retType, ObjectDef *obj,
 			0, 0, isConst, useFnInstr, useGeneric );
 }
 
-ObjectMethod *initFunction( UniqueType *retType, ObjectDef *obj, 
+ObjectMethod *initFunction( UniqueType *retType, ObjectDef *obj,
 		ObjectMethod::Type type, const String &name, int methIdWV, int methIdWC, UniqueType *arg1,
 		bool isConst, bool useFnInstr, GenericType *useGeneric )
 {
@@ -94,8 +94,8 @@ ObjectMethod *initFunction( UniqueType *retType, ObjectDef *obj,
 			1, args, isConst, useFnInstr, useGeneric );
 }
 
-ObjectMethod *initFunction( UniqueType *retType, ObjectDef *obj, 
-		ObjectMethod::Type type, const String &name, int methIdWV, int methIdWC, 
+ObjectMethod *initFunction( UniqueType *retType, ObjectDef *obj,
+		ObjectMethod::Type type, const String &name, int methIdWV, int methIdWC,
 		UniqueType *arg1, UniqueType *arg2,
 		bool isConst, bool useFnInstr, GenericType *useGeneric )
 {
@@ -108,7 +108,7 @@ ObjectMethod *initFunction( UniqueType *retType, ObjectDef *obj,
  * With namespace supplied. Global functions.
  */
 
-ObjectMethod *initFunction( UniqueType *retType, Namespace *nspace, ObjectDef *obj, 
+ObjectMethod *initFunction( UniqueType *retType, Namespace *nspace, ObjectDef *obj,
 		ObjectMethod::Type type, const String &name, int methIdWV, int methIdWC, bool isConst,
 		bool useFnInstr, GenericType *useGeneric )
 {
@@ -116,7 +116,7 @@ ObjectMethod *initFunction( UniqueType *retType, Namespace *nspace, ObjectDef *o
 			0, 0, isConst, useFnInstr, useGeneric );
 }
 
-ObjectMethod *initFunction( UniqueType *retType, Namespace *nspace, ObjectDef *obj, 
+ObjectMethod *initFunction( UniqueType *retType, Namespace *nspace, ObjectDef *obj,
 		ObjectMethod::Type type, const String &name, int methIdWV, int methIdWC, UniqueType *arg1,
 		bool isConst, bool useFnInstr, GenericType *useGeneric )
 {
@@ -125,8 +125,8 @@ ObjectMethod *initFunction( UniqueType *retType, Namespace *nspace, ObjectDef *o
 			1, args, isConst, useFnInstr, useGeneric );
 }
 
-ObjectMethod *initFunction( UniqueType *retType, Namespace *nspace, ObjectDef *obj, 
-		ObjectMethod::Type type, const String &name, int methIdWV, int methIdWC, 
+ObjectMethod *initFunction( UniqueType *retType, Namespace *nspace, ObjectDef *obj,
+		ObjectMethod::Type type, const String &name, int methIdWV, int methIdWC,
 		UniqueType *arg1, UniqueType *arg2,
 		bool isConst, bool useFnInstr, GenericType *useGeneric )
 {
@@ -338,7 +338,7 @@ void Compiler::declareBaseLangEls()
 	 * after a generation action. */
 	noTokenLangEl = declareLangEl( this, rootNamespace, "_notoken", LangEl::Term );
 	noTokenLangEl->isIgnore = true;
-	
+
 	ptrLangEl = declareLangEl( this, rootNamespace, "ptr", LangEl::Term );
 	strLangEl = declareLangEl( this, rootNamespace, "str", LangEl::Term );
 	ignoreLangEl = declareLangEl( this, rootNamespace, "il", LangEl::Term );
@@ -383,14 +383,14 @@ void Compiler::addProdRHSVars( ObjectDef *localFrame, ProdElList *prodElList )
 void GenericType::declare( Compiler *pd, Namespace *nspace )
 {
 	elUt = elTr->resolveType( pd );
- 
+
 	if ( typeId == GEN_MAP )
 		keyUt = keyTr->resolveType( pd );
-	
+
 	if ( typeId == GEN_MAP || typeId == GEN_LIST )
 		valueUt = valueTr->resolveType( pd );
-	
-	objDef = ObjectDef::cons( ObjectDef::BuiltinType, 
+
+	objDef = ObjectDef::cons( ObjectDef::BuiltinType,
 			"generic", pd->nextObjectId++ );
 
 	switch ( typeId ) {
@@ -689,7 +689,7 @@ void Compiler::makeDefaultIterators()
 	/* Tree iterator. */
 	{
 		UniqueType *anyRefUT = findUniqueType( TYPE_REF, anyLangEl );
-		ObjectMethod *objMethod = initFunction( uniqueTypeAny, rootNamespace, globalObjectDef, 
+		ObjectMethod *objMethod = initFunction( uniqueTypeAny, rootNamespace, globalObjectDef,
 				ObjectMethod::Call, "triter", IN_HALT, IN_HALT, anyRefUT, true );
 
 		IterDef *triter = findIterDef( IterDef::Tree );
@@ -698,7 +698,7 @@ void Compiler::makeDefaultIterators()
 
 	{
 		UniqueType *anyRefUT = findUniqueType( TYPE_REF, anyLangEl );
-		ObjectMethod *objMethod = initFunction( uniqueTypeAny, rootNamespace, globalObjectDef, 
+		ObjectMethod *objMethod = initFunction( uniqueTypeAny, rootNamespace, globalObjectDef,
 				ObjectMethod::Call, "with_ignore", IN_HALT, IN_HALT, anyRefUT, true );
 
 		IterDef *triter = findIterDef( IterDef::WithIgnore );
@@ -709,7 +709,7 @@ void Compiler::makeDefaultIterators()
 	/* Child iterator. */
 	{
 		UniqueType *anyRefUT = findUniqueType( TYPE_REF, anyLangEl );
-		ObjectMethod *objMethod = initFunction( uniqueTypeAny, rootNamespace, globalObjectDef, 
+		ObjectMethod *objMethod = initFunction( uniqueTypeAny, rootNamespace, globalObjectDef,
 				ObjectMethod::Call, "child", IN_HALT, IN_HALT, anyRefUT, true );
 
 		IterDef *triter = findIterDef( IterDef::Child );
@@ -719,7 +719,7 @@ void Compiler::makeDefaultIterators()
 	/* Reverse iterator. */
 	{
 		UniqueType *anyRefUT = findUniqueType( TYPE_REF, anyLangEl );
-		ObjectMethod *objMethod = initFunction( uniqueTypeAny, rootNamespace, globalObjectDef, 
+		ObjectMethod *objMethod = initFunction( uniqueTypeAny, rootNamespace, globalObjectDef,
 				ObjectMethod::Call, "rev_child", IN_HALT, IN_HALT, anyRefUT, true );
 
 		IterDef *triter = findIterDef( IterDef::RevChild );
@@ -729,7 +729,7 @@ void Compiler::makeDefaultIterators()
 	/* Repeat iterator. */
 	{
 		UniqueType *anyRefUT = findUniqueType( TYPE_REF, anyLangEl );
-		ObjectMethod *objMethod = initFunction( uniqueTypeAny, rootNamespace, globalObjectDef, 
+		ObjectMethod *objMethod = initFunction( uniqueTypeAny, rootNamespace, globalObjectDef,
 				ObjectMethod::Call, "repeat", IN_HALT, IN_HALT, anyRefUT, true );
 
 		IterDef *triter = findIterDef( IterDef::Repeat );
@@ -739,7 +739,7 @@ void Compiler::makeDefaultIterators()
 	/* Reverse repeat iterator. */
 	{
 		UniqueType *anyRefUT = findUniqueType( TYPE_REF, anyLangEl );
-		ObjectMethod *objMethod = initFunction( uniqueTypeAny, rootNamespace, globalObjectDef, 
+		ObjectMethod *objMethod = initFunction( uniqueTypeAny, rootNamespace, globalObjectDef,
 				ObjectMethod::Call, "rev_repeat", IN_HALT, IN_HALT, anyRefUT, true );
 
 		IterDef *triter = findIterDef( IterDef::RevRepeat );
@@ -749,7 +749,7 @@ void Compiler::makeDefaultIterators()
 	/* List iterator. */
 	{
 		UniqueType *anyRefUT = findUniqueType( TYPE_REF, anyLangEl );
-		ObjectMethod *objMethod = initFunction( uniqueTypeAny, rootNamespace, globalObjectDef, 
+		ObjectMethod *objMethod = initFunction( uniqueTypeAny, rootNamespace, globalObjectDef,
 				ObjectMethod::Call, "list_iter", IN_HALT, IN_HALT, anyRefUT, true );
 
 		IterDef *triter = findIterDef( IterDef::ListEl );
@@ -759,7 +759,7 @@ void Compiler::makeDefaultIterators()
 	/* Reverse Value List iterator. */
 	{
 		UniqueType *anyRefUT = findUniqueType( TYPE_REF, anyLangEl );
-		ObjectMethod *objMethod = initFunction( uniqueTypeAny, rootNamespace, globalObjectDef, 
+		ObjectMethod *objMethod = initFunction( uniqueTypeAny, rootNamespace, globalObjectDef,
 				ObjectMethod::Call, "rev_list_iter", IN_HALT, IN_HALT, anyRefUT, true );
 
 		IterDef *triter = findIterDef( IterDef::RevListVal );
@@ -769,7 +769,7 @@ void Compiler::makeDefaultIterators()
 	/* Map iterator. */
 	{
 		UniqueType *anyRefUT = findUniqueType( TYPE_REF, anyLangEl );
-		ObjectMethod *objMethod = initFunction( uniqueTypeAny, rootNamespace, globalObjectDef, 
+		ObjectMethod *objMethod = initFunction( uniqueTypeAny, rootNamespace, globalObjectDef,
 				ObjectMethod::Call, "map_iter", IN_HALT, IN_HALT, anyRefUT, true );
 
 		IterDef *triter = findIterDef( IterDef::MapEl );
@@ -919,7 +919,7 @@ void Compiler::declareInputFields( )
 {
 	inputObj = inputSel->structDef->objectDef;
 
-	initFunction( uniqueTypeStr, inputObj, ObjectMethod::Call, "pull",  
+	initFunction( uniqueTypeStr, inputObj, ObjectMethod::Call, "pull",
 			IN_INPUT_PULL_WV, IN_INPUT_PULL_WC, uniqueTypeInt, false );
 
 	initFunction( uniqueTypeStr, inputObj, ObjectMethod::Call, "push",  
@@ -1023,7 +1023,7 @@ ObjectField *Compiler::makePosEl()
 	return el;
 }
 
-/* Add a constant length field to the object. 
+/* Add a constant length field to the object.
  * Opcode supplied by the caller. */
 void Compiler::addLengthField( ObjectDef *objDef, code_t getLength )
 {
@@ -1144,6 +1144,10 @@ void Compiler::declareGlobalFields()
 
 	method = initFunction( uniqueTypeStr, rootNamespace, globalObjectDef, ObjectMethod::Call, "postfix",
 			IN_TREE_TO_STR_POSTFIX, IN_TREE_TO_STR_POSTFIX, uniqueTypeAny, true );
+	method->useCallObj = false;
+
+	method = initFunction( uniqueTypeStr, rootNamespace, globalObjectDef, ObjectMethod::Call, "type_name",
+			IN_ANY_TYPE_NAME, IN_ANY_TYPE_NAME, uniqueTypeAny, true );
 	method->useCallObj = false;
 
 	addStdin();
@@ -1295,26 +1299,26 @@ void Compiler::addDefineArgs()
 void Compiler::initMapFunctions( GenericType *gen )
 {
 	/* Value functions. */
-	initFunction( gen->valueUt, gen->objDef, ObjectMethod::Call, "find", 
+	initFunction( gen->valueUt, gen->objDef, ObjectMethod::Call, "find",
 			FN_VMAP_FIND,      FN_VMAP_FIND, gen->keyUt, true, true, gen );
 
-	initFunction( uniqueTypeInt, gen->objDef, ObjectMethod::Call, "insert", 
+	initFunction( uniqueTypeInt, gen->objDef, ObjectMethod::Call, "insert",
 			FN_VMAP_INSERT_WV, FN_VMAP_INSERT_WC, gen->keyUt, gen->valueUt,
 			false, true, gen );
 
-	initFunction( gen->elUt, gen->objDef, ObjectMethod::Call, "remove", 
+	initFunction( gen->elUt, gen->objDef, ObjectMethod::Call, "remove",
 			FN_VMAP_REMOVE_WV, FN_VMAP_REMOVE_WC, gen->keyUt, false, true, gen );
 
 	/*
 	 * Element Functions
 	 */
-	initFunction( gen->elUt, gen->objDef, ObjectMethod::Call, "find_el", 
+	initFunction( gen->elUt, gen->objDef, ObjectMethod::Call, "find_el",
 			FN_MAP_FIND,      FN_MAP_FIND, gen->keyUt, true, true, gen );
 
-	initFunction( uniqueTypeInt, gen->objDef, ObjectMethod::Call, "insert_el", 
+	initFunction( uniqueTypeInt, gen->objDef, ObjectMethod::Call, "insert_el",
 			FN_MAP_INSERT_WV, FN_MAP_INSERT_WC, gen->elUt, false, true, gen );
 
-	initFunction( gen->elUt, gen->objDef, ObjectMethod::Call, "detach_el", 
+	initFunction( gen->elUt, gen->objDef, ObjectMethod::Call, "detach_el",
 			FN_MAP_DETACH_WV, FN_MAP_DETACH_WC, gen->elUt, false, true, gen );
 }
 
@@ -1361,9 +1365,9 @@ void Compiler::initMapElKey( GenericType *gen, const char *name, int offset )
 	/* Make the type ref and create the field. */
 	ObjectField *el = ObjectField::cons( internal,
 			ObjectField::GenericDependentType, gen->keyTr, name );
-	
+
 	gen->el->mapKeyField = el;
-	
+
 	/* Offset will be computed when the offset of the owning map element field
 	 * is computed. */
 
@@ -1394,40 +1398,40 @@ void Compiler::initMapElField( GenericType *gen, const char *name, int offset )
 
 void Compiler::initListFunctions( GenericType *gen )
 {
-	initFunction( uniqueTypeInt, gen->objDef, ObjectMethod::Call, "push_head", 
+	initFunction( uniqueTypeInt, gen->objDef, ObjectMethod::Call, "push_head",
 			FN_VLIST_PUSH_HEAD_WV, FN_VLIST_PUSH_HEAD_WC, gen->valueUt, false, true, gen );
 
-	initFunction( uniqueTypeInt, gen->objDef, ObjectMethod::Call, "push_tail", 
+	initFunction( uniqueTypeInt, gen->objDef, ObjectMethod::Call, "push_tail",
 			FN_VLIST_PUSH_TAIL_WV, FN_VLIST_PUSH_TAIL_WC, gen->valueUt, false, true, gen );
 
-	initFunction( uniqueTypeInt, gen->objDef, ObjectMethod::Call, "push", 
+	initFunction( uniqueTypeInt, gen->objDef, ObjectMethod::Call, "push",
 			FN_VLIST_PUSH_HEAD_WV, FN_VLIST_PUSH_HEAD_WC, gen->valueUt, false, true, gen );
 
-	initFunction( gen->valueUt, gen->objDef, ObjectMethod::Call, "pop_head", 
+	initFunction( gen->valueUt, gen->objDef, ObjectMethod::Call, "pop_head",
 			FN_VLIST_POP_HEAD_WV, FN_VLIST_POP_HEAD_WC, false, true, gen );
 
-	initFunction( gen->valueUt, gen->objDef, ObjectMethod::Call, "pop_tail", 
+	initFunction( gen->valueUt, gen->objDef, ObjectMethod::Call, "pop_tail",
 			FN_VLIST_POP_TAIL_WV, FN_VLIST_POP_TAIL_WC, false, true, gen );
 
-	initFunction( gen->valueUt, gen->objDef, ObjectMethod::Call, "pop", 
+	initFunction( gen->valueUt, gen->objDef, ObjectMethod::Call, "pop",
 			FN_VLIST_POP_HEAD_WV, FN_VLIST_POP_HEAD_WC, false, true, gen );
 
-	initFunction( uniqueTypeInt, gen->objDef, ObjectMethod::Call, "push_head_el", 
+	initFunction( uniqueTypeInt, gen->objDef, ObjectMethod::Call, "push_head_el",
 			FN_LIST_PUSH_HEAD_WV, FN_LIST_PUSH_HEAD_WC, gen->elUt, false, true, gen );
 
-	initFunction( uniqueTypeInt, gen->objDef, ObjectMethod::Call, "push_tail_el", 
+	initFunction( uniqueTypeInt, gen->objDef, ObjectMethod::Call, "push_tail_el",
 			FN_LIST_PUSH_TAIL_WV, FN_LIST_PUSH_TAIL_WC, gen->elUt, false, true, gen );
 
-	initFunction( uniqueTypeInt, gen->objDef, ObjectMethod::Call, "push_el", 
+	initFunction( uniqueTypeInt, gen->objDef, ObjectMethod::Call, "push_el",
 			FN_LIST_PUSH_HEAD_WV, FN_LIST_PUSH_HEAD_WC, gen->elUt, false, true, gen );
 
-	initFunction( gen->elUt, gen->objDef, ObjectMethod::Call, "pop_head_el", 
+	initFunction( gen->elUt, gen->objDef, ObjectMethod::Call, "pop_head_el",
 			FN_LIST_POP_HEAD_WV, FN_LIST_POP_HEAD_WC, false, true, gen );
 
-	initFunction( gen->elUt, gen->objDef, ObjectMethod::Call, "pop_tail_el", 
+	initFunction( gen->elUt, gen->objDef, ObjectMethod::Call, "pop_tail_el",
 			FN_LIST_POP_TAIL_WV, FN_LIST_POP_TAIL_WC, false, true, gen );
 
-	initFunction( gen->elUt, gen->objDef, ObjectMethod::Call, "pop_el", 
+	initFunction( gen->elUt, gen->objDef, ObjectMethod::Call, "pop_el",
 			FN_LIST_POP_HEAD_WV, FN_LIST_POP_HEAD_WC, false, true, gen );
 }
 
@@ -1577,8 +1581,8 @@ void Compiler::makeFuncVisible( Function *func, bool isUserIter )
 	}
 
 	/* Insert the function into the global function map. */
-	ObjectMethod *objMethod = new ObjectMethod( func->typeRef, func->name, 
-			IN_CALL_WV, IN_CALL_WC, 
+	ObjectMethod *objMethod = new ObjectMethod( func->typeRef, func->name,
+			IN_CALL_WV, IN_CALL_WC,
 			func->paramList->length(), 0, func->paramList, false );
 	objMethod->funcId = func->funcId;
 	objMethod->useFuncId = true;
@@ -1609,8 +1613,8 @@ void Compiler::makeInHostVisible( Function *func )
 	}
 
 	/* Insert the function into the global function map. */
-	ObjectMethod *objMethod = new ObjectMethod( func->typeRef, func->name, 
-			IN_HOST, IN_HOST, 
+	ObjectMethod *objMethod = new ObjectMethod( func->typeRef, func->name,
+			IN_HOST, IN_HOST,
 			func->paramList->length(), 0, func->paramList, false );
 	objMethod->funcId = func->funcId;
 	objMethod->useFuncId = true;

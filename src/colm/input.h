@@ -49,6 +49,7 @@ struct colm_location;
 struct colm_program;
 struct colm_struct;
 struct colm_str;
+struct colm_stream;
 
 struct input_impl;
 struct stream_impl;

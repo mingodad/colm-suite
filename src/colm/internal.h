@@ -29,5 +29,11 @@ typedef struct colm_struct struct_t;
 typedef struct colm_program program_t;
 typedef unsigned long value_t;
 
+#define SHIFT_CODE 0x1
+#define REDUCE_CODE 0x2
+#define SHIFT_REDUCE_CODE 0x3
+#define SHIFT_REDUCE_MASK 0x3
+#define GET_SHIFT_REDUCE(act) (act >> 2)
+
 #endif /* _COLM_INTERNAL_H */
 

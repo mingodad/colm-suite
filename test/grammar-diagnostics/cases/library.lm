@@ -1,0 +1,10 @@
+# A library-style include with no parse root of its own. Everything would look
+# unreachable, which is not actionable, so no unreachable warnings are emitted.
+
+lex
+	literal `n
+	ignore / [ \t\n\r]+ /
+end
+
+def helper
+	[ `n ]

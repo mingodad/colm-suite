@@ -20,6 +20,7 @@
  * SOFTWARE.
  */
 
+#include "global.h"
 #define EOF_REGION 0
 
 #include <stdio.h>
@@ -117,13 +118,13 @@ LangEl::LangEl( Namespace *nspace, const String &name, Type type )
 	predType(PredNone),
 	predValue(0),
 	contextDef(0),
-	contextIn(0), 
+	contextIn(0),
 	noPreIgnore(false),
 	noPostIgnore(false),
 	isZero(false)
 {
 }
- 
+
 PdaGraph *ProdElList::walk( Compiler *pd, Production *prod )
 {
 	PdaGraph *prodFsm = new PdaGraph();
@@ -173,7 +174,7 @@ void Compiler::makeDefinitionNames()
 	for ( LelList::Iter lel = langEls; lel.lte(); lel++ ) {
 		int prodNum = 1;
 		for ( LelProdList::Iter def = lel->prodList; def.lte(); def++ ) {
-			def->data.setAs( lel->name.length() + 32, "%s-%i", 
+			def->data.setAs( lel->name.length() + 32, "%s-%i",
 					lel->name.data, prodNum++ );
 		}
 	}
@@ -200,8 +201,8 @@ void Compiler::makeLangElIds()
 	for ( LelList::Iter lel = langEls; lel.lte(); lel++ ) {
 		/* Must be a term, and not any of the special reserved terminals.
 		 * Remember if the non terminal is a user non terminal. */
-		if ( lel->type == LangEl::Term && 
-				!lel->isEOF && 
+		if ( lel->type == LangEl::Term &&
+				!lel->isEOF &&
 				lel != errorLangEl &&
 				lel != noTokenLangEl )
 		{
@@ -261,7 +262,7 @@ void Compiler::refNameSpace( LangEl *lel, Namespace *nspace )
 		lel->refName = "::" + lel->refName;
 		return;
 	}
-	
+
 	lel->refName = nspace->name + "::" + lel->refName;
 	lel->declName = nspace->name + "::" + lel->declName;
 	lel->xmlTag = nspace->name + "::" + lel->xmlTag;
@@ -335,6 +336,9 @@ void Compiler::makeProdFsms()
 		 * because the dot can be before the first and after the last element. */
 		int numForProd = prod->fsm->stateList.length() + 1;
 
+		/* Remember the first dot ID for this production. */
+		prod->firstDotId = dsiLow;
+
 		/* Set up the low and high values in the index for this production. */
 		dotItemIndex.data[indexPos].key = dsiLow;
 		dotItemIndex.data[indexPos].value = prod;
@@ -374,7 +378,7 @@ void Compiler::makeProdFsms()
  * it and over tab. If overSrc is the end of the production, find the follow
  * from the table, taking only the characters on which the parent is reduced.
  * */
-void Compiler::findFollow( AlphSet &result, PdaState *overTab, 
+void Compiler::findFollow( AlphSet &result, PdaState *overTab,
 		PdaState *overSrc, Production *parentDef )
 {
 	if ( overSrc->isFinState() ) {
@@ -408,7 +412,7 @@ void Compiler::findFollow( AlphSet &result, PdaState *overTab,
 			/* Find the equivalent state in the parser. */
 			if ( hasEpsilon ) {
 				PdaTrans *tabTrans = overTab->findTrans( pastTrans->key );
-				findFollow( result, tabTrans->toState, 
+				findFollow( result, tabTrans->toState,
 						pastTrans->value->toState, parentDef );
 			}
 
@@ -440,7 +444,7 @@ void Compiler::trySetTime( PdaTrans *trans, long code, long &time )
 		if ( *adl == code ) {
 			/* If the time of the shift is not already set, set it. */
 			if ( trans->actOrds[adl.pos()] == 0 ) {
-				//cerr << "setting time: state = " << tabState->stateNum 
+				//cerr << "setting time: state = " << tabState->stateNum
 				//		<< ", trans = " << tabTrans->lowKey
 				//		<< ", time = " << time << endl;
 				trans->actOrds[adl.pos()] = time++;
@@ -451,8 +455,8 @@ void Compiler::trySetTime( PdaTrans *trans, long code, long &time )
 }
 
 /* Go down a defintiion and then handle the follow actions. */
-void Compiler::pdaOrderFollow( LangEl *rootEl, PdaState *tabState, 
-		PdaTrans *tabTrans, PdaTrans *srcTrans, Production *parentDef, 
+void Compiler::pdaOrderFollow( LangEl *rootEl, PdaState *tabState,
+		PdaTrans *tabTrans, PdaTrans *srcTrans, Production *parentDef,
 		Production *definition, long &time )
 {
 	/* We need the follow from tabState/srcState over the definition we are
@@ -464,7 +468,7 @@ void Compiler::pdaOrderFollow( LangEl *rootEl, PdaState *tabState,
 	if ( parentDef == rootEl->rootDef )
 		alphSet.insert( rootEl->eofLel->id );
 	else
-		findFollow( alphSet, overTab, overSrc, parentDef );		
+		findFollow( alphSet, overTab, overSrc, parentDef );
 
 	/* Now follow the production to find out where it expands to. */
 	PdaState *expandToState = followProd( tabState, definition->fsm->startState );
@@ -475,9 +479,9 @@ void Compiler::pdaOrderFollow( LangEl *rootEl, PdaState *tabState,
 	for ( TransMap::Iter tt = expandToState->transMap; tt.lte(); tt++ ) {
 		if ( alphSet.find( tt->key ) ) {
 			trySetTime( tt->value, redCode, time );
-	
+
 			/* If the items token region is not recorded in the state, do it now. */
-			addRegion( expandToState, tt->value, tt->key, 
+			addRegion( expandToState, tt->value, tt->key,
 					tt->value->noPreIgnore, tt->value->noPostIgnore );
 		}
 	}
@@ -500,7 +504,7 @@ void Compiler::addRegion( PdaState *tabState, PdaTrans *tabTrans,
 		TokenRegion *region = 0;
 		RegionSet *regionSet = 0;
 
-		/* If it is not the eof, then use the region associated 
+		/* If it is not the eof, then use the region associated
 		 * with the token definition. */
 		if ( langEl->isZero ) {
 			region = langEl->tokenDef->regionSet->collectIgnore;
@@ -523,8 +527,8 @@ void Compiler::addRegion( PdaState *tabState, PdaTrans *tabTrans,
 
 			/* Pre-region of to state */
 			PdaState *toState = tabTrans->toState;
-			if ( !langEl->noPostIgnore && 
-					regionSet->ignoreOnly != 0 && 
+			if ( !langEl->noPostIgnore &&
+					regionSet->ignoreOnly != 0 &&
 					!regionVectHas( toState->preRegions, regionSet->ignoreOnly ) )
 			{
 				toState->preRegions.append( regionSet->ignoreOnly );
@@ -544,7 +548,7 @@ void Compiler::addRegion( PdaState *tabState, PdaTrans *tabTrans,
                     orderState( tabState, production.startState, time )
 
                     for all expandToState in tabTrans.expandToStates:
-                        for all followTrans in expandToState.transList 
+                        for all followTrans in expandToState.transList
                             reduceAction = findAction( production.reduction )
                             if reduceAction.time is unset:
                                 reduceAction.time = time++
@@ -566,17 +570,17 @@ void Compiler::addRegion( PdaState *tabState, PdaTrans *tabTrans,
     orderState( parseTable.startState, startProduction.startState, 1 )
 #endif
 
-void Compiler::pdaOrderProd( LangEl *rootEl, PdaState *tabState, 
+void Compiler::pdaOrderProd( LangEl *rootEl, PdaState *tabState,
 	PdaState *srcState, Production *parentDef, long &time )
 {
 	assert( srcState->dotSet.length() == 1 );
 	if ( tabState->dotSet2.find( srcState->dotSet[0] ) )
 		return;
 	tabState->dotSet2.insert( srcState->dotSet[0] );
-	
+
 	assert( srcState->transMap.length() == 0 || srcState->transMap.length() == 1 );
 
-	if ( srcState->transMap.length() == 1 ) { 
+	if ( srcState->transMap.length() == 1 ) {
 		TransMap::Iter srcTrans = srcState->transMap;
 
 		/* Find the equivalent state in the parser. */
@@ -590,12 +594,12 @@ void Compiler::pdaOrderProd( LangEl *rootEl, PdaState *tabState,
 				 * nonterminal. Does follows for all productions first, then
 				 * goes down the productions. */
 				for ( LelProdList::Iter expDef = langEl->prodList; expDef.lte(); expDef++ ) {
-					pdaOrderFollow( rootEl, tabState, tabTrans, srcTrans->value, 
+					pdaOrderFollow( rootEl, tabState, tabTrans, srcTrans->value,
 							parentDef, expDef, time );
 				}
 				for ( LelProdList::Iter expDef = langEl->prodList; expDef.lte(); expDef++ )
 					pdaOrderProd( rootEl, tabState, expDef->fsm->startState, expDef, time );
-				
+
 			}
 			else {
 				/* The default action ordering. For each prod, goes down the
@@ -603,7 +607,7 @@ void Compiler::pdaOrderProd( LangEl *rootEl, PdaState *tabState,
 				for ( LelProdList::Iter expDef = langEl->prodList; expDef.lte(); expDef++ ) {
 					pdaOrderProd( rootEl, tabState, expDef->fsm->startState, expDef, time );
 
-					pdaOrderFollow( rootEl, tabState, tabTrans, srcTrans->value, 
+					pdaOrderFollow( rootEl, tabState, tabTrans, srcTrans->value,
 							parentDef, expDef, time );
 				}
 			}
@@ -618,11 +622,11 @@ void Compiler::pdaOrderProd( LangEl *rootEl, PdaState *tabState,
 		}
 
 		/* If the items token region is not recorded in the state, do it now. */
-		addRegion( tabState, tabTrans, srcTrans->key, 
+		addRegion( tabState, tabTrans, srcTrans->key,
 				srcTrans->value->noPreIgnore, srcTrans->value->noPostIgnore );
 
 		/* Go over one in the production. */
-		pdaOrderProd( rootEl, tabTrans->toState, 
+		pdaOrderProd( rootEl, tabTrans->toState,
 				srcTrans->value->toState, parentDef, time );
 	}
 }
@@ -670,7 +674,7 @@ void Compiler::pdaActionOrder( PdaGraph *pdaGraph, LangElSet &parserEls )
 	///* Warn about states with empty token region lists. */
 	//for ( PdaStateList::Iter state = pdaGraph->stateList; state.lte(); state++ ) {
 	//	if ( state->regions.length() == 0 ) {
-	//		warning() << "state has an empty token region, state: " << 
+	//		warning() << "state has an empty token region, state: " <<
 	//			state->stateNum << endl;
 	//	}
 	//}
@@ -719,7 +723,7 @@ void Compiler::advanceReductions( PdaGraph *pdaGraph )
 			inReds.insert( in->reductions );
 		}
 
-		if ( !outHasShift && outReds.length() == 1 && 
+		if ( !outHasShift && outReds.length() == 1 &&
 				inHasShift && inReds.length() == 0 )
 		{
 			//cerr << "moving reduction to shift" << endl;
@@ -732,7 +736,7 @@ void Compiler::advanceReductions( PdaGraph *pdaGraph )
 				in->afterShiftCommits.insert( outCommits );
 			}
 
-			/* 
+			/*
 			 * Remove all transitions out of the state.
 			 */
 
@@ -749,6 +753,1256 @@ void Compiler::advanceReductions( PdaGraph *pdaGraph )
 	}
 
 	pdaGraph->removeUnreachableStates();
+}
+
+int Compiler::prodLength( Production *prod )
+{
+    int len = 0;
+
+    for ( ProdElList::Iter el = *prod->prodElList;
+          el.lte(); el++ )
+    {
+        len++;
+    }
+
+    return len;
+}
+
+void Compiler::printLocSuffix( std::ostream &out, Production *prod )
+{
+	if ( prod != 0 && prod->loc.fileName != 0 )
+		out << "  [" << locFileName( prod->loc ) << ":" << prod->loc.line << "]";
+}
+
+void Compiler::printDotItemForConflict( std::ostream &out, long dot, const char *label )
+{
+	Production *prod = prodForDot( dot );
+	if ( prod == 0 ) {
+		out << "      " << label
+			 << ": <unknown dot " << dot << ">\n";
+		return;
+	}
+
+	int dotPos = dotPosForDot( dot );
+
+	out << "      " << label << ": "
+		 << prod->prodName->name << " -> ";
+
+	int pos = 0;
+
+	for ( ProdElList::Iter el = *prod->prodElList;
+		  el.lte(); el++, pos++ )
+	{
+		if ( pos == dotPos )
+			out << ". ";
+
+		if ( el->langEl != 0 )
+			out << el->langEl->lit;
+		else
+			out << "?";
+
+		out << " ";
+	}
+
+	if ( pos == dotPos )
+		out << ".";
+
+	printLocSuffix( out, prod );
+
+	out << "\n";
+}
+
+void Compiler::printConflictDetails( std::ostream &out, PdaState *state, PdaTrans *trans )
+{
+	LangEl *lel = langElIndex[trans->lowKey];
+
+	bool hasShift = false;
+	int reduceCount = 0;
+
+	for ( ActDataList::Iter act = trans->actions;
+		  act.lte(); act++ )
+	{
+		switch ( *act & SHIFT_REDUCE_MASK ) {
+		case SHIFT_CODE:
+			hasShift = true;
+			break;
+
+		case REDUCE_CODE:
+			reduceCount++;
+			break;
+
+		case SHIFT_REDUCE_CODE:
+			break;
+		}
+	}
+
+	bool hasConflict = (hasShift && reduceCount > 0) || (reduceCount > 1);
+
+	if ( !hasConflict )
+		return;
+
+	out << "\n  CONFLICT on ";
+	if ( lel != 0 )
+		out << "'" << lel->lit << "'";
+	else
+		out << "<" << trans->lowKey << ">";
+
+	out << "\n";
+
+	for ( ActDataList::Iter act = trans->actions;
+		  act.lte(); act++ )
+	{
+		switch ( *act & SHIFT_REDUCE_MASK ) {
+		case SHIFT_CODE: {
+			out << "\n    SHIFT to state "
+				 << trans->toState->stateNum << "\n";
+
+			bool found = false;
+
+			for ( DotSet::Iter dot = state->dotSet;
+				  dot.lte(); dot++ )
+			{
+				Production *prod = prodForDot( *dot );
+				if ( prod == 0 )
+					continue;
+
+				int dotPos = dotPosForDot( *dot );
+				int pos = 0;
+
+				for ( ProdElList::Iter el = *prod->prodElList;
+					  el.lte(); el++, pos++ )
+				{
+					if ( pos != dotPos )
+						continue;
+
+					if ( lel != 0 && el->langEl == lel ) {
+						printDotItemForConflict( out,
+							*dot, "Candidate item" );
+						found = true;
+					}
+
+					break;
+				}
+			}
+			break;
+		}
+
+		case REDUCE_CODE: {
+			Production *target =
+				prodIdIndex[GET_SHIFT_REDUCE(*act)];
+
+			out << "\n    REDUCE "
+				 << target->prodName->name << "-"
+				 << target->prodNum;
+
+			printLocSuffix( out, target );
+
+			out << "\n";
+
+			bool found = false;
+			int targetLength = prodLength( target );
+
+			for ( DotSet::Iter dot = state->dotSet;
+				  dot.lte(); dot++ )
+			{
+				Production *prod = prodForDot( *dot );
+				if ( prod != target )
+					continue;
+
+				if ( dotPosForDot( *dot ) == targetLength ) {
+					printDotItemForConflict( out,
+						*dot, "Completed item" );
+					found = true;
+				}
+			}
+
+			if ( !found )
+				out << "      No completed item found in state.\n";
+
+			out << "      Action terminal: ";
+			if ( lel != 0 )
+				out << "'" << lel->lit << "'";
+			else
+				out << trans->lowKey;
+			out << "\n";
+
+			break;
+		}
+
+		case SHIFT_REDUCE_CODE: {
+			Production *prod =
+				prodIdIndex[GET_SHIFT_REDUCE(*act)];
+
+			out << "\n    SHIFT-REDUCE "
+				 << prod->prodName->name << "-"
+				 << prod->prodNum;
+
+			printLocSuffix( out, prod );
+
+			out << "\n";
+			break;
+        }
+        }
+    }
+}
+
+Production *Compiler::prodForDot( long dot )
+{
+	Production *result = 0;
+
+	for ( ProdList::Iter prod = prodList; prod.lte(); prod++ ) {
+		long low = prod->firstDotId;
+		long high = low + prod->fsm->stateList.length();
+
+		if ( dot >= low && dot <= high ) {
+			result = &*prod;
+			break;
+        }
+    }
+
+    return result;
+}
+
+int Compiler::dotPosForDot( long dot )
+{
+    Production *prod = prodForDot( dot );
+    if ( prod == 0 )
+        return -1;
+
+    return (int)(dot - prod->firstDotId);
+}
+
+void Compiler::recordPdaConflict( PdaTrans *trans )
+{
+    int cls = pdaConflictClass( trans );
+    trans->conflictRawKind = cls;
+
+    switch ( cls ) {
+    case 1:
+        pdaShiftReduceConflicts++;
+        break;
+
+    case 2:
+        pdaReduceReduceConflicts++;
+        break;
+    }
+}
+
+/* Classify the remaining actions of a transition. Returns 1 for a shift/reduce
+ * conflict, 2 for a reduce/reduce conflict and 0 for none. This is the single
+ * classifier used both for the raw counts (before precedence) and for the
+ * recount of what survived precedence resolution. */
+int Compiler::pdaConflictClass( PdaTrans *trans )
+{
+    bool hasShift = false;
+    int reduceCount = 0;
+
+    for ( ActDataList::Iter act = trans->actions; act.lte(); act++ ) {
+        switch ( *act & SHIFT_REDUCE_MASK ) {
+        case SHIFT_CODE:
+            hasShift = true;
+            break;
+
+        case REDUCE_CODE:
+            reduceCount++;
+            break;
+
+        case SHIFT_REDUCE_CODE:
+            /* Shift-reduces are already combined actions. */
+            break;
+        }
+    }
+
+    if ( hasShift && reduceCount > 0 )
+        return 1;
+    else if ( reduceCount > 1 )
+        return 2;
+    return 0;
+}
+
+void Compiler::countPdaConflicts( PdaGraph *pdaGraph,
+        long &shiftReduce, long &reduceReduce )
+{
+    shiftReduce = 0;
+    reduceReduce = 0;
+
+    for ( PdaStateList::Iter state = pdaGraph->stateList; state.lte(); state++ ) {
+        for ( TransMap::Iter tr = state->transMap; tr.lte(); tr++ ) {
+            switch ( pdaConflictClass( tr->value ) ) {
+            case 1:
+                shiftReduce++;
+                break;
+
+            case 2:
+                reduceReduce++;
+                break;
+            }
+        }
+    }
+}
+
+/* Count distinct conflict sites: one per (state, conflict kind, shift target,
+ * action set). The report prints one entry per site, covering all the
+ * lookahead tokens that share it, so this is the figure that reads as "number
+ * of decisions to make" rather than the per-lookahead pair counts. */
+long Compiler::countPdaConflictEntries( PdaGraph *pdaGraph )
+{
+	long entries = 0;
+
+	for ( PdaStateList::Iter state = pdaGraph->stateList; state.lte(); state++ ) {
+		for ( TransMap::Iter tr = state->transMap; tr.lte(); tr++ ) {
+			PdaTrans *trans = tr->value;
+			int cls = pdaConflictClass( trans );
+			if ( cls == 0 )
+				continue;
+
+			/* Count only the first transition in the state with this shape. */
+			bool first = true;
+			for ( TransMap::Iter prev = state->transMap;
+					prev.lte() && prev->value != trans; prev++ ) {
+				PdaTrans *p = prev->value;
+				if ( pdaConflictClass( p ) != cls || p->toState != trans->toState )
+					continue;
+				if ( p->actions.length() != trans->actions.length() )
+					continue;
+
+				bool same = true;
+				for ( int k = 0; k < trans->actions.length(); k++ ) {
+					if ( p->actions[k] != trans->actions[k] ) {
+						same = false;
+						break;
+					}
+				}
+				if ( same ) {
+					first = false;
+					break;
+				}
+			}
+
+			if ( first )
+				entries++;
+		}
+	}
+
+	return entries;
+}
+
+bool Compiler::pdaStateHasConflict( PdaState *state )
+{
+	for ( TransMap::Iter tr = state->transMap; tr.lte(); tr++ ) {
+		if ( pdaConflictClass( tr->value ) != 0 )
+			return true;
+	}
+	return false;
+}
+
+/* Format a single action code. toStateNum supplies the shift target because
+ * the action code itself does not carry it. */
+void Compiler::printPdaAction( std::ostream &out, long act, long toStateNum )
+{
+	switch ( act & SHIFT_REDUCE_MASK ) {
+	case SHIFT_CODE:
+		out << "shift " << toStateNum;
+		break;
+
+	case REDUCE_CODE: {
+		Production *prod = prodIdIndex[GET_SHIFT_REDUCE(act)];
+		out << "reduce " << prod->prodName->name << "-" << prod->prodNum;
+		break;
+	}
+
+	case SHIFT_REDUCE_CODE: {
+		Production *prod = prodIdIndex[GET_SHIFT_REDUCE(act)];
+		out << "shift-reduce " << prod->prodName->name << "-" << prod->prodNum;
+		break;
+	}
+	}
+}
+
+/* Snapshot every raw conflict (before precedence resolution) so the report can
+ * still list conflicts that are later resolved or removed (e.g. by nonassoc).
+ * Actions are copied because the transition may be removed. */
+void Compiler::snapshotPdaConflicts( PdaGraph *pdaGraph )
+{
+	pdaConflicts.empty();
+
+	for ( PdaStateList::Iter state = pdaGraph->stateList; state.lte(); state++ ) {
+		for ( TransMap::Iter tr = state->transMap; tr.lte(); tr++ ) {
+			PdaTrans *trans = tr->value;
+			int cls = pdaConflictClass( trans );
+			if ( cls == 0 )
+				continue;
+
+			PdaConflictRec rec;
+			rec.state = &*state;
+			rec.lowKey = trans->lowKey;
+			rec.kind = cls;
+			rec.toStateNum = trans->toState != 0 ?
+					trans->toState->stateNum : -1;
+			for ( ActDataList::Iter act = trans->actions; act.lte(); act++ )
+				rec.actions.append( *act );
+
+			trans->conflictRec = pdaConflicts.length();
+			pdaConflicts.append( rec );
+		}
+	}
+}
+
+/* Finalize the record for one transition once precedence resolution is done
+ * with it. Called while the transition is still alive. */
+void Compiler::finishPdaConflict( PdaTrans *trans )
+{
+	if ( trans->conflictRec < 0 )
+		return;
+
+	PdaConflictRec &rec = pdaConflicts[trans->conflictRec];
+	rec.resolve = trans->conflictResolve;
+	rec.stillConflict = ( pdaConflictClass( trans ) != 0 );
+
+	if ( rec.stillConflict )
+		rec.levelOnlyTie = pdaConflictLevelTie( trans );
+
+	rec.survivingAction = trans->actions.length() > 0 ?
+			trans->actions[0] : -1;
+}
+
+/* True if a surviving conflict holds only because two competing actions were
+ * declared at the same precedence level with no associativity. */
+bool Compiler::pdaConflictLevelTie( PdaTrans *trans )
+{
+	for ( int i = 0; i < trans->actions.length(); i++ ) {
+		LangEl *li = predOf( trans, trans->actions[i] );
+		if ( li == 0 || li->predType == PredNone )
+			continue;
+
+		for ( int j = i+1; j < trans->actions.length(); j++ ) {
+			LangEl *lj = predOf( trans, trans->actions[j] );
+			if ( lj == 0 || lj->predType == PredNone )
+				continue;
+
+			if ( li->predValue == lj->predValue )
+				return true;
+		}
+	}
+	return false;
+}
+
+/* JSON string escaping for identifiers, file names and token literals. */
+static void jsonStr( std::ostream &out, const char *s )
+{
+	out << '"';
+	for ( const char *p = s; p != 0 && *p != 0; p++ ) {
+		switch ( *p ) {
+		case '"':  out << "\\\""; break;
+		case '\\': out << "\\\\"; break;
+		case '\n': out << "\\n"; break;
+		case '\r': out << "\\r"; break;
+		case '\t': out << "\\t"; break;
+		default:    out << *p; break;
+		}
+	}
+	out << '"';
+}
+
+/* Write one action as a JSON object. */
+static void jsonAction( std::ostream &out, Production **prodIdIndex,
+		long act, long toStateNum )
+{
+	out << "{";
+	switch ( act & SHIFT_REDUCE_MASK ) {
+	case SHIFT_CODE:
+		out << "\"type\":\"shift\",\"target\":" << toStateNum;
+		break;
+
+	case REDUCE_CODE:
+	case SHIFT_REDUCE_CODE: {
+		Production *prod = prodIdIndex[GET_SHIFT_REDUCE(act)];
+		out << "\"type\":\""
+			<< ( ( act & SHIFT_REDUCE_MASK ) == REDUCE_CODE ? "reduce" : "shift-reduce" )
+			<< "\",\"production\":";
+		jsonStr( out, prod->prodName->name );
+		out << ",\"prodNum\":" << prod->prodNum;
+		if ( prod->loc.fileName != 0 ) {
+			out << ",\"file\":";
+			jsonStr( out, locFileName( prod->loc ) );
+			out << ",\"line\":" << prod->loc.line;
+		}
+		break;
+	}
+	}
+	out << "}";
+}
+
+/* True if a record should be listed given the --pda-report=state/token
+ * filters. The summary counts are unaffected; only listing is filtered. */
+bool Compiler::pdaConflictPassesFilter( PdaState *state, long lowKey )
+{
+	if ( pdaReportFilterState >= 0 && state->stateNum != pdaReportFilterState )
+		return false;
+
+	if ( pdaReportFilterToken != 0 && *pdaReportFilterToken != 0 ) {
+		LangEl *lel = langElIndex[lowKey];
+		if ( lel == 0 || lel->lit == 0 )
+			return false;
+		if ( strcmp( lel->lit, pdaReportFilterToken ) != 0 )
+			return false;
+	}
+
+	return true;
+}
+
+/* Print the competing items for one conflict identity. Reduce items are
+ * token-independent; the shift candidate is printed for the representative
+ * lookahead. */
+void Compiler::printPdaConflictItems( std::ostream &out, PdaState *state,
+		const PdaConflictRec &rec )
+{
+	for ( long k = 0; k < rec.actions.length(); k++ ) {
+		long act = rec.actions[k];
+		if ( ( act & SHIFT_REDUCE_MASK ) != REDUCE_CODE )
+			continue;
+
+		Production *target = prodIdIndex[GET_SHIFT_REDUCE(act)];
+		int targetLength = prodLength( target );
+
+		for ( DotSet::Iter dot = state->dotSet; dot.lte(); dot++ ) {
+			if ( prodForDot( *dot ) != target )
+				continue;
+			if ( dotPosForDot( *dot ) == targetLength )
+				printDotItemForConflict( out, *dot, "reduce" );
+		}
+	}
+
+	if ( rec.kind != 1 )
+		return;
+
+	LangEl *lel = langElIndex[rec.lowKey];
+	if ( lel == 0 )
+		return;
+
+	for ( DotSet::Iter dot = state->dotSet; dot.lte(); dot++ ) {
+		Production *prod = prodForDot( *dot );
+		if ( prod == 0 )
+			continue;
+
+		int dotPos = dotPosForDot( *dot );
+		int pos = 0;
+		for ( ProdElList::Iter el = *prod->prodElList; el.lte(); el++, pos++ ) {
+			if ( pos == dotPos && el->langEl == lel ) {
+				printDotItemForConflict( out, *dot, "shift" );
+				break;
+			}
+		}
+	}
+}
+
+/* The conflict report proper. Groups identical conflicts (same state, kind and
+ * action set) so a single item-pair is printed once with its whole lookahead
+ * set, instead of once per token. Covers ALL raw conflicts, annotated with how
+ * precedence resolution disposed of them. */
+void Compiler::printPdaConflicts( std::ostream &out, bool withItems, bool withShapes )
+{
+	long srRaw = 0, rrRaw = 0, srRem = 0, rrRem = 0;
+	for ( long i = 0; i < pdaConflicts.length(); i++ ) {
+		const PdaConflictRec &rec = pdaConflicts[i];
+		if ( rec.kind == 1 ) {
+			srRaw++;
+			if ( rec.stillConflict ) srRem++;
+		}
+		else {
+			rrRaw++;
+			if ( rec.stillConflict ) rrRem++;
+		}
+	}
+
+	out << "\n=== CONFLICTS (raw: " << srRaw << " shift/reduce, " << rrRaw
+		<< " reduce/reduce; remaining: " << srRem << " shift/reduce, "
+		<< rrRem << " reduce/reduce)";
+	if ( pdaReportFilterState >= 0 )
+		out << " [filter: state " << pdaReportFilterState << "]";
+	if ( pdaReportFilterToken != 0 && *pdaReportFilterToken != 0 )
+		out << " [filter: token " << pdaReportFilterToken << "]";
+	out << " ===\n";
+
+	/* Mark filtered-out records as used so grouping skips them. Summary
+	 * counts above stay global. */
+	Vector<char> used;
+	for ( long i = 0; i < pdaConflicts.length(); i++ )
+		used.append( pdaConflictPassesFilter( pdaConflicts[i].state,
+				pdaConflicts[i].lowKey ) ? 0 : 1 );
+
+	for ( long i = 0; i < pdaConflicts.length(); i++ ) {
+		if ( used[i] )
+			continue;
+
+		const PdaConflictRec &r = pdaConflicts[i];
+		Vector<long> group;
+
+		for ( long j = i; j < pdaConflicts.length(); j++ ) {
+			if ( used[j] )
+				continue;
+
+			const PdaConflictRec &s = pdaConflicts[j];
+			if ( s.state != r.state || s.kind != r.kind ||
+					s.toStateNum != r.toStateNum ||
+					s.actions.length() != r.actions.length() )
+				continue;
+
+			bool same = true;
+			for ( long k = 0; k < r.actions.length(); k++ ) {
+				if ( s.actions[k] != r.actions[k] ) {
+					same = false;
+					break;
+				}
+			}
+			if ( !same )
+				continue;
+
+			used[j] = 1;
+			group.append( j );
+		}
+
+		/* Aggregate status across the group. */
+		bool still = false, tie = false, nonassoc = false;
+		bool byLevel = false, byAssoc = false;
+		for ( long g = 0; g < group.length(); g++ ) {
+			const PdaConflictRec &s = pdaConflicts[group[g]];
+			still = still || s.stillConflict;
+			tie = tie || s.levelOnlyTie;
+			nonassoc = nonassoc || ( ( s.resolve & PdaResNonassoc ) != 0 );
+			byLevel = byLevel || ( ( s.resolve & PdaResLevel ) != 0 );
+			byAssoc = byAssoc || ( ( s.resolve & PdaResAssoc ) != 0 );
+		}
+
+		out << "\nstate " << r.state->stateNum << "  "
+			<< ( r.kind == 1 ? "shift/reduce" : "reduce/reduce" ) << "  ";
+
+		for ( long k = 0; k < r.actions.length(); k++ ) {
+			if ( k != 0 )
+				out << " | ";
+			printPdaAction( out, r.actions[k], r.toStateNum );
+		}
+
+		out << "  [";
+		if ( still && tie )
+			out << "UNRESOLVED level-only tie";
+		else if ( still )
+			out << "UNRESOLVED no precedence";
+		else if ( nonassoc && !byLevel && !byAssoc )
+			out << "error nonassoc";
+		else {
+			out << "resolved";
+			if ( byLevel )
+				out << " by level";
+			if ( byAssoc )
+				out << " by assoc";
+			if ( nonassoc )
+				out << " + nonassoc error";
+		}
+		out << "]";
+
+		/* Actions are stored in priority/ordinal order and the runtime
+		 * indexes from the front, falling back to the next on a retry. So the
+		 * first surviving action is the one attempted first. */
+		long firstTry = -1;
+		for ( long g = 0; g < group.length(); g++ ) {
+			if ( pdaConflicts[group[g]].survivingAction >= 0 ) {
+				firstTry = pdaConflicts[group[g]].survivingAction;
+				break;
+			}
+		}
+		if ( still && firstTry >= 0 ) {
+			out << " (runtime first-tries ";
+			printPdaAction( out, firstTry, r.toStateNum );
+			out << ", then retries)";
+		}
+
+		out << "\ntokens(" << group.length() << "):";
+		for ( long g = 0; g < group.length(); g++ ) {
+			const PdaConflictRec &s = pdaConflicts[group[g]];
+			LangEl *lel = langElIndex[s.lowKey];
+			if ( lel != 0 )
+				out << " " << lel->lit;
+			else
+				out << " <" << s.lowKey << ">";
+		}
+		out << "\n";
+
+		if ( withItems )
+			printPdaConflictItems( out, r.state, r );
+	}
+
+	if ( withShapes )
+		printPdaConflictShapes( out );
+
+	out << "\n";
+}
+
+/* Canonical order for an action set. The stored order is the runtime
+ * first-try order, which is not meaningful to a shape, so sorting it lets
+ * shapes that differ only in that order aggregate together. */
+static void sortActionCodes( Vector<long> &actions )
+{
+	for ( long i = 1; i < actions.length(); i++ ) {
+		long v = actions[i];
+		long j = i - 1;
+		while ( j >= 0 && actions[j] > v ) {
+			actions[j + 1] = actions[j];
+			j--;
+		}
+		actions[j + 1] = v;
+	}
+}
+
+/* Aggregate identical conflict identities across states: an author fixes a
+ * shape, not a state. Only shapes spanning more than one state are shown,
+ * since single-state shapes are already listed above. */
+void Compiler::printPdaConflictShapes( std::ostream &out )
+{
+	struct Shape {
+		int kind;
+		long toStateNum;
+		Vector<long> actions;
+		Vector<long> states;
+		bool still;
+	};
+	Vector<Shape> shapes;
+
+	Vector<char> used;
+	for ( long i = 0; i < pdaConflicts.length(); i++ )
+		used.append( pdaConflictPassesFilter( pdaConflicts[i].state,
+				pdaConflicts[i].lowKey ) ? 0 : 1 );
+
+	for ( long i = 0; i < pdaConflicts.length(); i++ ) {
+		if ( used[i] )
+			continue;
+
+		const PdaConflictRec &r = pdaConflicts[i];
+		Shape sh;
+		sh.kind = r.kind;
+		sh.toStateNum = r.toStateNum;
+		sh.still = false;
+		for ( long k = 0; k < r.actions.length(); k++ )
+			sh.actions.append( r.actions[k] );
+		sortActionCodes( sh.actions );
+
+		for ( long j = i; j < pdaConflicts.length(); j++ ) {
+			if ( used[j] )
+				continue;
+
+			const PdaConflictRec &s = pdaConflicts[j];
+			if ( s.kind != r.kind || s.toStateNum != r.toStateNum ||
+					s.actions.length() != r.actions.length() )
+				continue;
+
+			Vector<long> sActions;
+			for ( long k = 0; k < s.actions.length(); k++ )
+				sActions.append( s.actions[k] );
+			sortActionCodes( sActions );
+
+			bool same = true;
+			for ( long k = 0; k < r.actions.length(); k++ ) {
+				if ( sActions[k] != sh.actions[k] ) {
+					same = false;
+					break;
+				}
+			}
+			if ( !same )
+				continue;
+
+			used[j] = 1;
+
+			bool seen = false;
+			for ( long q = 0; q < sh.states.length(); q++ ) {
+				if ( sh.states[q] == s.state->stateNum ) {
+					seen = true;
+					break;
+				}
+			}
+			if ( !seen )
+				sh.states.append( s.state->stateNum );
+
+			sh.still = sh.still || s.stillConflict;
+		}
+
+		shapes.append( sh );
+	}
+
+	bool anyMulti = false;
+	for ( long i = 0; i < shapes.length(); i++ ) {
+		if ( shapes[i].states.length() > 1 ) {
+			anyMulti = true;
+			break;
+		}
+	}
+	if ( !anyMulti )
+		return;
+
+	out << "\n=== CONFLICT SHAPES (same action set across states) ===\n";
+
+	for ( long i = 0; i < shapes.length(); i++ ) {
+		Shape &sh = shapes[i];
+		if ( sh.states.length() < 2 )
+			continue;
+
+		out << "  " << ( sh.kind == 1 ? "shift/reduce " : "reduce/reduce" )
+			<< "  ";
+		for ( long k = 0; k < sh.actions.length(); k++ ) {
+			if ( k != 0 )
+				out << " | ";
+			printPdaAction( out, sh.actions[k], sh.toStateNum );
+		}
+		out << "  [" << sh.states.length() << " states] (states";
+		for ( long q = 0; q < sh.states.length(); q++ )
+			out << " " << sh.states[q];
+		out << ")" << ( sh.still ? " UNRESOLVED" : "" ) << "\n";
+	}
+}
+
+/* JSON form of the grouped conflicts, plus the cross-state shapes. Stable key
+ * order so CI can diff two revisions. Locations are included when known. */
+void Compiler::printPdaConflictsJson( std::ostream &out )
+{
+	long srRaw = 0, rrRaw = 0, srRem = 0, rrRem = 0;
+	for ( long i = 0; i < pdaConflicts.length(); i++ ) {
+		const PdaConflictRec &rec = pdaConflicts[i];
+		if ( rec.kind == 1 ) {
+			srRaw++;
+			if ( rec.stillConflict ) srRem++;
+		}
+		else {
+			rrRaw++;
+			if ( rec.stillConflict ) rrRem++;
+		}
+	}
+
+	out << "{\n";
+	out << "  \"rawShiftReduce\": " << srRaw << ",\n";
+	out << "  \"rawReduceReduce\": " << rrRaw << ",\n";
+	out << "  \"remainingShiftReduce\": " << srRem << ",\n";
+	out << "  \"remainingReduceReduce\": " << rrRem << ",\n";
+	if ( pdaReportFilterState >= 0 )
+		out << "  \"filterState\": " << pdaReportFilterState << ",\n";
+	if ( pdaReportFilterToken != 0 && *pdaReportFilterToken != 0 ) {
+		out << "  \"filterToken\": ";
+		jsonStr( out, pdaReportFilterToken );
+		out << ",\n";
+	}
+
+	Vector<char> used;
+	for ( long i = 0; i < pdaConflicts.length(); i++ )
+		used.append( pdaConflictPassesFilter( pdaConflicts[i].state,
+				pdaConflicts[i].lowKey ) ? 0 : 1 );
+
+	out << "  \"conflicts\": [";
+	bool firstGroup = true;
+
+	for ( long i = 0; i < pdaConflicts.length(); i++ ) {
+		if ( used[i] )
+			continue;
+
+		const PdaConflictRec &r = pdaConflicts[i];
+		Vector<long> group;
+
+		for ( long j = i; j < pdaConflicts.length(); j++ ) {
+			if ( used[j] )
+				continue;
+
+			const PdaConflictRec &s = pdaConflicts[j];
+			if ( s.state != r.state || s.kind != r.kind ||
+					s.toStateNum != r.toStateNum ||
+					s.actions.length() != r.actions.length() )
+				continue;
+
+			bool same = true;
+			for ( long k = 0; k < r.actions.length(); k++ ) {
+				if ( s.actions[k] != r.actions[k] ) {
+					same = false;
+					break;
+				}
+			}
+			if ( !same )
+				continue;
+
+			used[j] = 1;
+			group.append( j );
+		}
+
+		bool still = false, tie = false, nonassoc = false;
+		bool byLevel = false, byAssoc = false;
+		for ( long g = 0; g < group.length(); g++ ) {
+			const PdaConflictRec &s = pdaConflicts[group[g]];
+			still = still || s.stillConflict;
+			tie = tie || s.levelOnlyTie;
+			nonassoc = nonassoc || ( ( s.resolve & PdaResNonassoc ) != 0 );
+			byLevel = byLevel || ( ( s.resolve & PdaResLevel ) != 0 );
+			byAssoc = byAssoc || ( ( s.resolve & PdaResAssoc ) != 0 );
+		}
+
+		if ( !firstGroup )
+			out << ",";
+		firstGroup = false;
+
+		out << "\n    {\"state\": " << r.state->stateNum << ", ";
+		out << "\"kind\": ";
+		jsonStr( out, r.kind == 1 ? "shift/reduce" : "reduce/reduce" );
+
+		out << ", \"status\": ";
+		if ( still )
+			out << "\"unresolved\"";
+		else if ( nonassoc && !byLevel && !byAssoc )
+			out << "\"nonassoc-error\"";
+		else
+			out << "\"resolved\"";
+
+		if ( still )
+			out << ", \"tie\": " << ( tie ? "true" : "false" );
+		else if ( byLevel || byAssoc ) {
+			out << ", \"resolvedBy\": \"";
+			bool plus = false;
+			if ( byLevel ) { out << "level"; plus = true; }
+			if ( byAssoc ) { if ( plus ) out << "+"; out << "assoc"; }
+			out << "\"";
+		}
+
+		out << ", \"actions\": [";
+		for ( long k = 0; k < r.actions.length(); k++ ) {
+			if ( k != 0 )
+				out << ", ";
+			jsonAction( out, prodIdIndex, r.actions[k], r.toStateNum );
+		}
+		out << "]";
+
+		long firstTry = -1;
+		for ( long g = 0; g < group.length(); g++ ) {
+			if ( pdaConflicts[group[g]].survivingAction >= 0 ) {
+				firstTry = pdaConflicts[group[g]].survivingAction;
+				break;
+			}
+		}
+		out << ", \"runtimeFirst\": ";
+		if ( still && firstTry >= 0 )
+			jsonAction( out, prodIdIndex, firstTry, r.toStateNum );
+		else
+			out << "null";
+
+		out << ", \"tokens\": [";
+		for ( long g = 0; g < group.length(); g++ ) {
+			if ( g != 0 )
+				out << ", ";
+			const PdaConflictRec &s = pdaConflicts[group[g]];
+			LangEl *lel = langElIndex[s.lowKey];
+			if ( lel != 0 && lel->lit != 0 )
+				jsonStr( out, lel->lit );
+			else {
+				char buf[32];
+				snprintf( buf, sizeof(buf), "<%ld>", s.lowKey );
+				jsonStr( out, buf );
+			}
+		}
+		out << "]}";
+	}
+
+	out << "\n  ],\n";
+
+	/* Cross-state shapes. */
+	for ( long i = 0; i < pdaConflicts.length(); i++ )
+		used[i] = pdaConflictPassesFilter( pdaConflicts[i].state,
+				pdaConflicts[i].lowKey ) ? 0 : 1;
+
+	out << "  \"shapes\": [";
+	bool firstShape = true;
+
+	for ( long i = 0; i < pdaConflicts.length(); i++ ) {
+		if ( used[i] )
+			continue;
+
+		const PdaConflictRec &r = pdaConflicts[i];
+		Vector<long> rActions;
+		for ( long k = 0; k < r.actions.length(); k++ )
+			rActions.append( r.actions[k] );
+		sortActionCodes( rActions );
+		Vector<long> states;
+		bool still = false;
+
+		for ( long j = i; j < pdaConflicts.length(); j++ ) {
+			if ( used[j] )
+				continue;
+
+			const PdaConflictRec &s = pdaConflicts[j];
+			if ( s.kind != r.kind || s.toStateNum != r.toStateNum ||
+					s.actions.length() != r.actions.length() )
+				continue;
+
+			Vector<long> sActions;
+			for ( long k = 0; k < s.actions.length(); k++ )
+				sActions.append( s.actions[k] );
+			sortActionCodes( sActions );
+
+			bool same = true;
+			for ( long k = 0; k < rActions.length(); k++ ) {
+				if ( sActions[k] != rActions[k] ) {
+					same = false;
+					break;
+				}
+			}
+			if ( !same )
+				continue;
+
+			used[j] = 1;
+
+			bool seen = false;
+			for ( long q = 0; q < states.length(); q++ ) {
+				if ( states[q] == s.state->stateNum ) {
+					seen = true;
+					break;
+				}
+			}
+			if ( !seen )
+				states.append( s.state->stateNum );
+
+			still = still || s.stillConflict;
+		}
+
+		if ( states.length() < 2 )
+			continue;
+
+		if ( !firstShape )
+			out << ",";
+		firstShape = false;
+
+		out << "\n    {\"kind\": ";
+		jsonStr( out, r.kind == 1 ? "shift/reduce" : "reduce/reduce" );
+		out << ", \"actions\": [";
+		for ( long k = 0; k < rActions.length(); k++ ) {
+			if ( k != 0 )
+				out << ", ";
+			jsonAction( out, prodIdIndex, rActions[k], r.toStateNum );
+		}
+		out << "], \"states\": [";
+		for ( long q = 0; q < states.length(); q++ ) {
+			if ( q != 0 )
+				out << ", ";
+			out << states[q];
+		}
+		out << "], \"unresolved\": " << ( still ? "true" : "false" ) << "}";
+	}
+
+	out << "\n  ]\n}\n";
+}
+
+void Compiler::printPdaState( std::ostream &out, PdaState *state )
+{
+	out << "\nstate " << state->stateNum;
+	printPdaStateConflicts( out, state );
+	out << "\n\n";
+
+	/* Print LR items. */
+	for ( DotSet::Iter dot = state->dotSet; dot.lte(); dot++ )
+		printDotItem( out, *dot );
+
+	out << "\n";
+
+	/* Print finalized transitions and actions. */
+	for ( TransMap::Iter tr = state->transMap; tr.lte(); tr++ ) {
+		PdaTrans *trans = tr->value;
+		LangEl *lel = langElIndex[trans->lowKey];
+
+		out << "    ";
+
+		if ( lel != 0 )
+			out << lel->lit;
+		else
+			out << "<" << trans->lowKey << ">";
+
+		if ( trans->actions.length() == 0 ) {
+			out << "  (no actions)\n";
+			continue;
+		}
+
+		for ( ActDataList::Iter act = trans->actions; act.lte(); act++ ) {
+			switch ( *act & SHIFT_REDUCE_MASK ) {
+			case SHIFT_CODE:
+				out << "  shift " << trans->toState->stateNum;
+				break;
+
+			case REDUCE_CODE: {
+				Production *prod = prodIdIndex[GET_SHIFT_REDUCE(*act)];
+				out << "  reduce "
+					 << prod->prodName->name << "-"
+					 << prod->prodNum;
+				break;
+			}
+
+			case SHIFT_REDUCE_CODE: {
+				Production *prod = prodIdIndex[GET_SHIFT_REDUCE(*act)];
+				out << "  shift-reduce "
+					 << prod->prodName->name << "-"
+					 << prod->prodNum;
+				break;
+			}
+			}
+
+			if ( !act.last() )
+				out << " |";
+		}
+
+		out << "\n";
+		printConflictDetails( out, state, trans );
+	}
+}
+
+void Compiler::printPdaStateConflicts( std::ostream &out, PdaState *state )
+{
+	int shiftReduceTransitions = 0;
+	int reduceReduceTransitions = 0;
+	int shiftReducePairs = 0;
+	int reduceReducePairs = 0;
+
+	for ( TransMap::Iter tr = state->transMap;
+		  tr.lte(); tr++ )
+	{
+		PdaTrans *trans = tr->value;
+
+		int shifts = 0;
+		int reductions = 0;
+
+		for ( ActDataList::Iter act = trans->actions;
+			  act.lte(); act++ )
+		{
+			switch ( *act & SHIFT_REDUCE_MASK ) {
+			case SHIFT_CODE:
+				shifts++;
+				break;
+
+			case REDUCE_CODE:
+				reductions++;
+				break;
+
+			case SHIFT_REDUCE_CODE:
+				break;
+			}
+		}
+
+		if ( shifts > 0 && reductions > 0 )
+			shiftReduceTransitions++;
+
+		if ( reductions > 1 )
+			reduceReduceTransitions++;
+
+		shiftReducePairs += shifts * reductions;
+		reduceReducePairs += reductions * ( reductions - 1 ) / 2;
+	}
+
+	out << "  ["
+		 << shiftReduceTransitions << " shift/reduce transitions, "
+		 << reduceReduceTransitions << " reduce/reduce transitions; "
+		 << shiftReducePairs << " shift/reduce pairs, "
+		 << reduceReducePairs << " reduce/reduce pairs]\n";
+}
+
+void Compiler::printPdaReport( std::ostream &out, PdaGraph *pdaGraph, bool conflictsOnly )
+{
+	for ( PdaStateList::Iter state = pdaGraph->stateList;
+		  state.lte(); state++ )
+	{
+		if ( conflictsOnly && !pdaStateHasConflict( &*state ) )
+			continue;
+		printPdaState( out, &*state );
+	}
+}
+
+void Compiler::printDotItem( std::ostream &out, long dot )
+{
+    Production *prod = prodForDot( dot );
+	if ( prod == 0 ) {
+		out << "    <unknown dot " << dot << ">\n";
+		return;
+	}
+
+	int dotPos = dotPosForDot( dot );
+
+	out << "    " << prod->prodName->name << " -> ";
+
+	int pos = 0;
+
+	for ( ProdElList::Iter el = *prod->prodElList;
+		  el.lte(); el++, pos++ )
+	{
+		if ( pos == dotPos )
+			out << ". ";
+
+		if ( el->langEl != 0 )
+			out << el->langEl->lit;
+		else
+			out << "?";
+
+		out << " ";
+	}
+
+	if ( pos == dotPos )
+		out << ".";
+
+	printLocSuffix( out, prod );
+
+	out << "\n";
+}
+
+/* Assign state numbers for the report in a deterministic order: breadth-first
+ * from the start state, following transitions in token-key order (transMap is
+ * ordered, stateList is not stable across runs). This keeps report output
+ * byte-stable and makes the raw dump and the conflict index agree. Code
+ * generation still uses PdaGraph::setStateNumbers; this is report-only. */
+void Compiler::assignReportStateNumbers( PdaGraph *pdaGraph )
+{
+	for ( PdaStateList::Iter state = pdaGraph->stateList; state.lte(); state++ )
+		state->stateNum = -1;
+
+	Vector<PdaState*> queue;
+	PdaState *start = pdaGraph->startState;
+	if ( start != 0 ) {
+		start->stateNum = 0;
+		queue.append( start );
+	}
+
+	int next = 1;
+	for ( int qi = 0; qi < queue.length(); qi++ ) {
+		PdaState *state = queue[qi];
+		for ( TransMap::Iter tel = state->transMap; tel.lte(); tel++ ) {
+			PdaState *to = tel->value->toState;
+			if ( to != 0 && to->stateNum < 0 ) {
+				to->stateNum = next++;
+				queue.append( to );
+			}
+		}
+	}
+
+	/* States unreachable from the start keep a stable tail number. */
+	for ( PdaStateList::Iter state = pdaGraph->stateList; state.lte(); state++ ) {
+		if ( state->stateNum < 0 )
+			state->stateNum = next++;
+	}
+}
+
+void Compiler::printRawConflictReport( std::ostream &out, PdaGraph *pdaGraph )
+{
+	assignReportStateNumbers( pdaGraph );
+
+	out << "\n=== RAW CONFLICT REPORT "
+		 << "(before precedence resolution) ===\n";
+
+	printPdaReport( out, pdaGraph, false );
+}
+
+void Compiler::printFinalConflictReport( std::ostream &out, PdaGraph *pdaGraph,
+		bool conflictsOnly )
+{
+	assignReportStateNumbers( pdaGraph );
+
+	out << "\n=== CONFLICT REPORT "
+		 << "(after precedence resolution) ===\n";
+
+	printPdaReport( out, pdaGraph, conflictsOnly );
 }
 
 void Compiler::sortActions( PdaGraph *pdaGraph )
@@ -784,26 +2038,89 @@ void Compiler::sortActions( PdaGraph *pdaGraph )
 				actPriors.remove(min);
 			}
 
+			if ( trans->actions.length() > 1 )
+			    recordPdaConflict( trans );
+
 			if ( branchPointInfo && trans->actions.length() > 1 ) {
+				cerr << "RAW CONFLICT"
+				    << " state: " << state->stateNum
+				    << " trans: ";
+				LangEl *lel = langElIndex[trans->lowKey];
+
+				if ( lel == 0 )
+				    cerr << (char)trans->lowKey << endl;
+				else
+				    cerr << lel->lit << endl;
+
+				cerr << "    DOT ITEMS:" << endl;
+				for ( DotSet::Iter dot = state->dotSet; dot.lte(); dot++ ) {
+				    DotItemIndexEl *di = dotItemIndex.find(*dot);
+				    cerr << "        dot=" << *dot;
+				    if (di != 0) {
+				        Production *prod = di->value;
+				        cerr << " prodId=" << prod->prodId
+				             << " prodNum=" << prod->prodNum
+				             << " prodName=" << prod->prodName->name;
+						printDotItem( cerr, *dot );
+				    }
+				    else {
+				        cerr << " <NO PRODUCTION>";
+				    }
+				    cerr << endl;
+				}
+
+				for ( ActDataList::Iter act = trans->actions; act.lte(); act++ ) {
+				    long action = *act;
+
+				    switch ( action & SHIFT_REDUCE_MASK ) {
+				    case SHIFT_CODE:
+				        cerr << "    SHIFT"
+				             << " action=" << action
+				             << " target=" << trans->toState
+				             << endl;
+				        break;
+
+				    case REDUCE_CODE:
+					{
+					    int prodId = GET_SHIFT_REDUCE(action);
+					    Production *prod = prodIdIndex[prodId];
+
+					    cerr << "    REDUCE "
+					         << prod->data
+					         << " prodId=" << prodId
+					         << " action=" << action
+					         << endl;
+
+					    break;
+					}
+
+				    case SHIFT_REDUCE_CODE:
+				        cerr << "    SHIFT-REDUCE"
+				             << " action=" << action
+				             << endl;
+				        break;
+				    }
+				}
+
 				cerr << "info: branch point"
 						<< " state: " << state->stateNum
 						<< " trans: ";
-				LangEl *lel = langElIndex[trans->lowKey];
+				lel = langElIndex[trans->lowKey];
 				if ( lel == 0 )
 					cerr << (char)trans->lowKey << endl;
 				else
 					cerr << lel->lit << endl;
 
 				for ( ActDataList::Iter act = trans->actions; act.lte(); act++ ) {
-					switch ( *act & 0x3 ) {
-					case 1: 
+					switch ( *act & SHIFT_REDUCE_MASK ) {
+					case SHIFT_CODE:
 						cerr << "    shift" << endl;
 						break;
-					case 2: 
-						cerr << "    reduce " << 
-								prodIdIndex[(*act >> 2)]->data << endl;
+					case REDUCE_CODE:
+						cerr << "    reduce " <<
+								prodIdIndex[GET_SHIFT_REDUCE(*act)]->data << endl;
 						break;
-					case 3:
+					case SHIFT_REDUCE_CODE:
 						cerr << "    shift-reduce" << endl;
 						break;
 					}
@@ -813,8 +2130,8 @@ void Compiler::sortActions( PdaGraph *pdaGraph )
 			/* Verify that shifts of nonterminals don't have any branch
 			 * points or commits. */
 			if ( trans->lowKey >= firstNonTermId ) {
-				if ( trans->actions.length() != 1 || 
-					(trans->actions[0] & 0x3) != 1 )
+				if ( trans->actions.length() != 1 ||
+					(trans->actions[0] & SHIFT_REDUCE_MASK) != 1 )
 				{
 					error() << "TRANS ON NONTERMINAL is something "
 						"other than a shift" << endl;
@@ -852,12 +2169,12 @@ void Compiler::reduceActions( PdaGraph *pdaGraph )
 			else {
 				commitLen = commitLen * -1;
 			}
-			
+
 			//if ( commitLen != 0 ) {
 			//	cerr << "FINAL ACTION COMMIT LEN: " << commitLen << endl;
 			//}
 
-			pdaGraph->actionSet.insert( ActionData( trans->toState->stateNum, 
+			pdaGraph->actionSet.insert( ActionData( trans->toState->stateNum,
 					trans->actions, commitLen ), &inSet );
 			trans->actionSetEl = inSet;
 		}
@@ -868,7 +2185,7 @@ void Compiler::computeAdvanceReductions( LangEl *langEl, PdaGraph *pdaGraph )
 {
 	/* Get the entry into the graph and traverse over the root. The resulting
 	 * state can have eof, nothing else can. */
-	PdaState *overStart = pdaGraph->followFsm( 
+	PdaState *overStart = pdaGraph->followFsm(
 			langEl->startState,
 			langEl->rootDef->fsm );
 
@@ -889,7 +2206,7 @@ void Compiler::verifyParseStopGrammar( LangEl *langEl, PdaGraph *pdaGraph )
 {
 	/* Get the entry into the graph and traverse over the root. The resulting
 	 * state can have eof, nothing else can. */
-	PdaState *overStart = pdaGraph->followFsm( 
+	PdaState *overStart = pdaGraph->followFsm(
 			langEl->startState,
 			langEl->rootDef->fsm );
 
@@ -914,37 +2231,81 @@ LangEl *Compiler::predOf( PdaTrans *trans, long action )
 	if ( action == SHIFT_CODE )
 		lel = langElIndex[trans->lowKey];
 	else
-		lel = prodIdIndex[action >> 2]->predOf;
+		lel = prodIdIndex[GET_SHIFT_REDUCE(action)]->predOf;
 	return lel;
 }
 
 
-bool Compiler::precedenceSwap( long action1, long action2, LangEl *l1, LangEl *l2 )
+PredOutcome Compiler::precedenceSwap( long action1, long action2, LangEl *l1, LangEl *l2 )
 {
-	bool swap = false;
-	if ( l2->predValue > l1->predValue )
-		swap = true;
-	else if ( l1->predValue == l2->predValue ) {
-		if ( l1->predType == PredLeft && action1 == SHIFT_CODE )
-			swap = true;
-		else if ( l1->predType == PredRight && action2 == SHIFT_CODE )
-			swap = true;
+	/* Different levels: the higher level wins; associativity is irrelevant. */
+	if ( l1->predValue != l2->predValue )
+		return ( l2->predValue > l1->predValue ) ? PrecSwap : PrecKeep;
+
+	/* Equal levels: bison consults the lookahead (shift) token's associativity. */
+	LangEl *lShift = ( action1 == SHIFT_CODE ) ? l1 :
+			( action2 == SHIFT_CODE ) ? l2 : 0;
+
+	if ( lShift != 0 ) {
+		switch ( lShift->predType ) {
+		case PredLeft:
+			/* left assoc -> reduce wins */
+			return ( action1 == SHIFT_CODE ) ? PrecSwap : PrecKeep;
+
+		case PredRight:
+			/* right assoc -> shift wins */
+			return ( action2 == SHIFT_CODE ) ? PrecSwap : PrecKeep;
+
+		case PredNonassoc:
+			/* neither action survives */
+			return PrecNonassoc;
+
+		case PredPrecedence:
+			/* Level only, no associativity to decide with. Leave it as a
+			 * visible conflict. */
+			return PrecUndecided;
+
+		default:
+			break;
+		}
 	}
-	return swap;
+
+	/* Reduce/reduce (no shift token). Keep the historical behavior, but make
+	 * level-only ties visible. */
+	if ( l1->predType == PredNonassoc )
+		return PrecNonassoc;
+	if ( l1->predType == PredPrecedence || l2->predType == PredPrecedence )
+		return PrecUndecided;
+	return PrecKeep;
 }
 
-bool Compiler::precedenceRemoveBoth( LangEl *l1, LangEl *l2 )
+/* Emit a per-conflict line for the --pda-report output. */
+void Compiler::printPrecedenceDecision( std::ostream &out, PdaState *state,
+		PdaTrans *trans, LangEl *l1, LangEl *l2, PredOutcome result )
 {
-	if ( l1->predValue == l2->predValue && l1->predType == PredNonassoc )
-		return true;
-	return false;
+	LangEl *tok = langElIndex[trans->lowKey];
+
+	out << "precedence: state " << state->stateNum << " token ";
+	if ( tok != 0 )
+		out << tok->lit;
+	else
+		out << "<" << trans->lowKey << ">";
+
+	out << " (l1 " << l1->predValue << ", l2 " << l2->predValue << ") -> ";
+	switch ( result ) {
+	case PrecSwap:      out << "swap"; break;
+	case PrecKeep:      out << "keep"; break;
+	case PrecNonassoc:  out << "nonassoc (error)"; break;
+	case PrecUndecided: out << "undecided (level-only tie)"; break;
+	}
+	out << "\n";
 }
 
-void Compiler::resolvePrecedence( PdaGraph *pdaGraph )
+void Compiler::resolvePrecedence( PdaGraph *pdaGraph, std::ostream &report )
 {
 	for ( PdaStateList::Iter state = pdaGraph->stateList; state.lte(); state++ ) {
 		assert( CmpDotSet::compare( state->dotSet, state->dotSet2 ) == 0 );
-		
+
 		for ( long t = 0; t < state->transMap.length(); /* increment at end */ ) {
 			PdaTrans *trans = state->transMap[t].value;
 
@@ -952,7 +2313,7 @@ again:
 			/* Find action with precedence. */
 			for ( int i = 0; i < trans->actions.length(); i++ ) {
 				LangEl *li = predOf( trans, trans->actions[i] );
-					
+
 				if ( li != 0 && li->predType != PredNone ) {
 					/* Find another action with precedence. */
 					for ( int j = i+1; j < trans->actions.length(); j++ ) {
@@ -960,17 +2321,47 @@ again:
 
 						if ( lj != 0 && lj->predType != PredNone ) {
 							/* Conflict to check. */
-							bool swap = precedenceSwap( trans->actions[i], 
+							PredOutcome out = precedenceSwap( trans->actions[i],
 									trans->actions[j], li, lj );
-							
-							if ( swap ) {
-								long t = trans->actions[i];
-								trans->actions[i] = trans->actions[j];
-								trans->actions[j] = t;
+
+							if ( out == PrecUndecided ) {
+								/* Level-only precedence: there is no associativity
+								 * to decide with. Leave both actions; the conflict
+								 * stays and is counted in "remaining". Do not goto
+								 * again: this scan only terminates by removing an
+								 * action. */
+								pdaPrecedenceTies++;
+								if ( generatePdaReport && pdaReportMode == PdaReportFull )
+									printPrecedenceDecision( report, state, trans, li, lj, out );
+								continue;
 							}
 
+							bool byLevel = ( li->predValue != lj->predValue );
+
+							if ( out == PrecSwap ) {
+								long tmpAct = trans->actions[i];
+								trans->actions[i] = trans->actions[j];
+								trans->actions[j] = tmpAct;
+							}
+
+							if ( out == PrecNonassoc ) {
+								pdaResolvedNonassoc++;
+								trans->conflictResolve |= PdaResNonassoc;
+							}
+							else if ( byLevel ) {
+								pdaResolvedByLevel++;
+								trans->conflictResolve |= PdaResLevel;
+							}
+							else {
+								pdaResolvedByAssoc++;
+								trans->conflictResolve |= PdaResAssoc;
+							}
+
+							if ( generatePdaReport && pdaReportMode == PdaReportFull )
+								printPrecedenceDecision( report, state, trans, li, lj, out );
+
 							trans->actions.remove( j );
-							if ( precedenceRemoveBoth( li, lj ) )
+							if ( out == PrecNonassoc )
 								trans->actions.remove( i );
 
 							goto again;
@@ -980,7 +2371,10 @@ again:
 			}
 
 			/* If there are still actions then move to the next one. If not,
-			 * (due to nonassoc) then remove the transition. */
+			 * (due to nonassoc) then remove the transition. Either way the record
+			 * can be finalized now, while the transition is still alive. */
+			finishPdaConflict( trans );
+
 			if ( trans->actions.length() > 0 )
 				t += 1;
 			else
@@ -1011,7 +2405,46 @@ void Compiler::analyzeMachine( PdaGraph *pdaGraph, LangElSet &parserEls )
 
 	pdaActionOrder( pdaGraph, parserEls );
 	sortActions( pdaGraph );
-	resolvePrecedence( pdaGraph );
+
+	/* Conflict sites (distinct state + kind + shift target + action set),
+	 * counted before precedence resolution so the summary can distinguish the
+	 * number of decisions from the per-lookahead pair counts. */
+	long conflictEntries = countPdaConflictEntries( pdaGraph );
+
+	/* All report output goes to one stream so it can be redirected as a unit. */
+	std::ostream &report = pdaReportStream != 0 ? *pdaReportStream : cerr;
+
+	/* Capture every raw conflict before resolution touches the transitions, so
+	 * the report can show what happened to each one. Needs state numbers. */
+	if ( generatePdaReport ) {
+		assignReportStateNumbers( pdaGraph );
+		snapshotPdaConflicts( pdaGraph );
+	}
+
+	if ( generatePdaReport && pdaReportMode == PdaReportFull )
+		printRawConflictReport( report, pdaGraph );
+
+	resolvePrecedence( pdaGraph, report );
+
+	if ( generatePdaReport ) {
+		if ( pdaReportMode == PdaReportJson ) {
+			printPdaConflictsJson( report );
+		}
+		else {
+			printPdaConflicts( report,
+					pdaReportMode == PdaReportConflicts,
+					pdaReportMode == PdaReportClusters );
+			if ( pdaReportMode == PdaReportFull )
+				printFinalConflictReport( report, pdaGraph, false );
+		}
+	}
+
+	/* Recount the conflicts that survived precedence resolution. This is the
+	 * authoritative "remaining" figure; the per-pair counters above are
+	 * diagnostics and can double-count a multi-action conflict site. */
+	countPdaConflicts( pdaGraph, pdaRemainingShiftReduce, pdaRemainingReduceReduce );
+	pdaResolvedConflicts = ( pdaShiftReduceConflicts - pdaRemainingShiftReduce ) +
+			( pdaReduceReduceConflicts - pdaRemainingReduceReduce );
 
 	/* Verify that any type we parse_stop can actually be parsed that way. */
 	for ( LangElSet::Iter pe = parserEls; pe.lte(); pe++ ) {
@@ -1022,13 +2455,24 @@ void Compiler::analyzeMachine( PdaGraph *pdaGraph, LangElSet &parserEls )
 
 	advanceReductions( pdaGraph );
 	pdaGraph->setStateNumbers();
+
+	if ( generatePdaReport && pdaReportMode == PdaReportFull ) {
+		report << "\n=== PDA AFTER ADVANCE REDUCTIONS ===\n";
+		printPdaReport( report, pdaGraph, false );
+	}
+
 	reduceActions( pdaGraph );
+
+	if ( generatePdaReport && pdaReportMode == PdaReportFull ) {
+		report << "\n=== PDA AFTER ACTION REDUCTION ===\n";
+		printPdaReport( report, pdaGraph, false );
+	}
 
 	/* Set the action ids. */
 	int actionSetId = 0;
 	for ( PdaActionSet::Iter asi = pdaGraph->actionSet; asi.lte(); asi++ )
 		asi->key.id = actionSetId++;
-	
+
 	/* Get the max index. */
 	pdaGraph->maxIndex = actionSetId - 1;
 
@@ -1047,7 +2491,7 @@ void Compiler::analyzeMachine( PdaGraph *pdaGraph, LangElSet &parserEls )
 			if ( langEl != 0 && langEl->type == LangEl::NonTerm ) {
 				assert( trans->value->actions.length() == 1 );
 				assert( trans->value->actions[0] == SHIFT_CODE ||
-					(trans->value->actions[0] & 0x3) == SHIFT_REDUCE_CODE );
+					(trans->value->actions[0] & SHIFT_REDUCE_MASK) == SHIFT_REDUCE_CODE );
 			}
 		}
 	}
@@ -1056,7 +2500,7 @@ void Compiler::analyzeMachine( PdaGraph *pdaGraph, LangElSet &parserEls )
 	for ( PdaStateList::Iter state = pdaGraph->stateList; state.lte(); state++ ) {
 		for ( TransMap::Iter trans = state->transMap; trans.lte(); trans++ ) {
 			for ( ActDataList::Iter act = trans->value->actions; act.lte(); act++ ) {
-				if ( (*act & 0x3) == SHIFT_REDUCE_CODE )
+				if ( (*act & SHIFT_REDUCE_MASK) == SHIFT_REDUCE_CODE )
 					assert( trans->value->actions.length() == 1 );
 			}
 		}
@@ -1067,6 +2511,24 @@ void Compiler::analyzeMachine( PdaGraph *pdaGraph, LangElSet &parserEls )
 		LangEl *lel = *pe;
 		if ( lel->parseStop )
 			verifyParseStopGrammar(lel , pdaGraph);
+	}
+
+	long unresolved = pdaRemainingShiftReduce + pdaRemainingReduceReduce;
+	/* In JSON mode the report stream must contain JSON only. */
+	if ( pdaReportMode != PdaReportJson ) {
+		cerr << "conflicts: "
+			<< pdaShiftReduceConflicts << " shift/reduce, "
+			<< pdaReduceReduceConflicts << " reduce/reduce over "
+			<< conflictEntries << " conflict entries, "
+			<< pdaResolvedConflicts << " resolved ("
+			<< pdaResolvedByLevel << " by level, "
+			<< pdaResolvedByAssoc << " by assoc, "
+			<< pdaResolvedNonassoc << " nonassoc->error), "
+			<< pdaPrecedenceTies << " level-only ties, "
+			<< unresolved << " remaining ("
+			<< pdaRemainingShiftReduce << " shift/reduce, "
+			<< pdaRemainingReduceReduce << " reduce/reduce)"
+			<< endl;
 	}
 }
 
@@ -1080,7 +2542,7 @@ void Compiler::wrapNonTerminals()
 	for ( LelList::Iter lel = langEls; lel.lte(); lel++ ) {
 		/* Make a single production used when the lel is a root. */
 		ProdElList *prodElList = makeProdElList( lel );
-		lel->rootDef = Production::cons( InputLoc(), rootLangEl, 
+		lel->rootDef = Production::cons( InputLoc(), rootLangEl,
 				prodElList, String(), false, 0,
 				prodList.length(), rootLangEl->prodList.length() );
 		prodList.append( lel->rootDef );
@@ -1104,7 +2566,7 @@ bool Compiler::makeNonTermFirstSetProd( Production *prod, PdaState *state )
 			bool hasEpsilon = false;
 			LangEl *lel = langElIndex[trans->key];
 			for ( LelProdList::Iter ldef = lel->prodList; ldef.lte(); ldef++ ) {
-				for ( ProdIdSet::Iter pid = ldef->nonTermFirstSet; 
+				for ( ProdIdSet::Iter pid = ldef->nonTermFirstSet;
 						pid.lte(); pid++ )
 				{
 					if ( *pid == -1 )
@@ -1202,7 +2664,7 @@ bool Compiler::makeFirstSetProd( Production *prod, PdaState *state )
 			bool hasEpsilon = false;
 			LangEl *lel = langElIndex[trans->key];
 			for ( LelProdList::Iter ldef = lel->prodList; ldef.lte(); ldef++ ) {
-				for ( ProdIdSet::Iter pid = ldef->firstSet; 
+				for ( ProdIdSet::Iter pid = ldef->firstSet;
 						pid.lte(); pid++ )
 				{
 					if ( *pid == -1 )
@@ -1261,7 +2723,7 @@ void Compiler::printFirstSets()
 				cerr << " <EPSILON>";
 			else {
 				LangEl *lel = langElIndex[*pid];
-				if ( lel != 0 ) 
+				if ( lel != 0 )
 					cerr << endl << "    " << lel->name;
 				else
 					cerr << endl << "    " << *pid;
@@ -1282,7 +2744,7 @@ void Compiler::insertUniqueEmptyProductions()
 		char name[20];
 		snprintf(name, sizeof(name), "U%li", prodList.length());
 		LangEl *prodName = addLangEl( this, rootNamespace, name, LangEl::NonTerm );
-		Production *newDef = Production::cons( InputLoc(), prodName, 
+		Production *newDef = Production::cons( InputLoc(), prodName,
 				0, String(), false, 0, prodList.length(), prodName->prodList.length() );
 		prodName->prodList.append( newDef );
 		prodList.append( newDef );
@@ -1418,15 +2880,28 @@ void Compiler::makeRuntimeData()
 	runtimeData->region_info[0].default_token = -1;
 	runtimeData->region_info[0].eof_frame_id = -1;
 	runtimeData->region_info[0].ci_lel_id = 0;
+	runtimeData->region_info[0].name = "pre";
 
 	for ( RegionList::Iter reg = regionList; reg.lte(); reg++ ) {
 		long regId = reg->id+1;
 		runtimeData->region_info[regId].default_token =
 				reg->impl->defaultTokenInstance == 0 ?
-				-1 : 
+				-1 :
 				reg->impl->defaultTokenInstance->tokenDef->tdLangEl->id;
 		runtimeData->region_info[regId].eof_frame_id = -1;
 		runtimeData->region_info[regId].ci_lel_id = reg->zeroLel != 0 ? reg->zeroLel->id : 0;
+
+		{
+			/* Label the region by where its lex block was declared. */
+			char rbuf[1024];
+			const char *fn = reg->loc.fileName != 0 ?
+					reg->loc.fileName : "?";
+			const char *base = strrchr( fn, '/' );
+			if ( base != 0 )
+				fn = base + 1;
+			snprintf( rbuf, sizeof(rbuf), "%s:%d", fn, reg->loc.line );
+			runtimeData->region_info[regId].name = strdup( rbuf );
+		}
 
 		CodeBlock *block = reg->preEofBlock;
 		if ( block != 0 ) {
@@ -1477,11 +2952,11 @@ void Compiler::makeRuntimeData()
 				runtimeData->frame_info[block->frameId].arg_size = 0;
 				runtimeData->frame_info[block->frameId].ret_tree = false;
 			}
-			
-			runtimeData->lel_info[i].object_type_id = 
+
+			runtimeData->lel_info[i].object_type_id =
 					lel->objectDef == 0 ? 0 : lel->objectDef->id;
 			runtimeData->lel_info[i].ofi_offset = lel->ofiOffset;
-			runtimeData->lel_info[i].object_length = 
+			runtimeData->lel_info[i].object_length =
 					lel->objectDef != 0 ? lel->objectDef->size() : 0;
 
 //			runtimeData->lelInfo[i].contextTypeId = 0;
@@ -1489,13 +2964,13 @@ void Compiler::makeRuntimeData()
 //			runtimeData->lelInfo[i].contextLength = 0; //lel->context == 0 ? 0 :
 //					lel->context->contextObjDef->size();
 //			if ( lel->context != 0 ) {
-//				cout << "type: " << runtimeData->lelInfo[i].contextTypeId << " length: " << 
+//				cout << "type: " << runtimeData->lelInfo[i].contextTypeId << " length: " <<
 //					runtimeData->lelInfo[i].contextLength << endl;
 //			}
 
 			runtimeData->lel_info[i].term_dup_id = lel->termDup == 0 ? 0 : lel->termDup->id;
 
-			if ( lel->tokenDef != 0 && lel->tokenDef->join != 0 && 
+			if ( lel->tokenDef != 0 && lel->tokenDef->join != 0 &&
 					lel->tokenDef->join->context != 0 )
 				runtimeData->lel_info[i].mark_id = lel->tokenDef->join->mark->markId;
 			else
@@ -1583,7 +3058,7 @@ void Compiler::makeRuntimeData()
 	runtimeData->pat_repl_nodes = 0;
 	runtimeData->num_pattern_nodes = 0;
 
-	
+
 	/*
 	 * generic_info
 	 */
@@ -1772,11 +3247,11 @@ void countNodes( program_t *prg, int &count, parse_tree_t *parseTree, kid_t *kid
 				ignore = ignore->next;
 			}
 		}
-		
+
 		//count += prg->rtd->lelInfo[kid->tree->id].numCaptureAttr;
 
-		if ( !( parseTree->flags & PF_NAMED ) && 
-				!( parseTree->flags & PF_ARTIFICIAL ) && 
+		if ( !( parseTree->flags & PF_NAMED ) &&
+				!( parseTree->flags & PF_ARTIFICIAL ) &&
 				tree_child( prg, kid->tree ) != 0 )
 		{
 			countNodes( prg, count, parseTree->child, tree_child( prg, kid->tree ) );
@@ -1785,23 +3260,23 @@ void countNodes( program_t *prg, int &count, parse_tree_t *parseTree, kid_t *kid
 	}
 }
 
-void fillNodes( program_t *prg, int &nextAvail, struct bindings *bindings, long &bindId, 
+void fillNodes( program_t *prg, int &nextAvail, struct bindings *bindings, long &bindId,
 		struct pat_cons_node *nodes, parse_tree_t *parseTree, kid_t *kid, int ind )
 {
 	if ( kid != 0 ) {
 		struct pat_cons_node &node = nodes[ind];
 
-		kid_t *child = 
-			!( parseTree->flags & PF_NAMED ) && 
-			!( parseTree->flags & PF_ARTIFICIAL ) && 
-			tree_child( prg, kid->tree ) != 0 
+		kid_t *child =
+			!( parseTree->flags & PF_NAMED ) &&
+			!( parseTree->flags & PF_ARTIFICIAL ) &&
+			tree_child( prg, kid->tree ) != 0
 			?
 			tree_child( prg, kid->tree ) : 0;
 
 		parse_tree_t *ptChild =
-			!( parseTree->flags & PF_NAMED ) && 
-			!( parseTree->flags & PF_ARTIFICIAL ) && 
-			tree_child( prg, kid->tree ) != 0 
+			!( parseTree->flags & PF_NAMED ) &&
+			!( parseTree->flags & PF_ARTIFICIAL ) &&
+			tree_child( prg, kid->tree ) != 0
 			?
 			parseTree->child : 0;
 
@@ -1823,7 +3298,7 @@ void fillNodes( program_t *prg, int &nextAvail, struct bindings *bindings, long 
 			node.id = ignore->tree->id;
 			node.prod_num = ignore->tree->prod_num;
 			node.next = ignore->next == 0 ? -1 : nextAvail;
-				
+
 			node.length = string_length( ignore->tree->tokdata );
 			node.data = string_data( ignore->tree->tokdata );
 
@@ -1842,7 +3317,7 @@ void fillNodes( program_t *prg, int &nextAvail, struct bindings *bindings, long 
 			node.id = ignore->tree->id;
 			node.prod_num = ignore->tree->prod_num;
 			node.next = ignore->next == 0 ? -1 : nextAvail;
-				
+
 			node.length = string_length( ignore->tree->tokdata );
 			node.data = string_data( ignore->tree->tokdata );
 
@@ -1851,7 +3326,7 @@ void fillNodes( program_t *prg, int &nextAvail, struct bindings *bindings, long 
 
 		///* The captured attributes. */
 		//for ( int i = 0; i < prg->rtd->lelInfo[kid->tree->id].numCaptureAttr; i++ ) {
-		//	CaptureAttr *cap = prg->rtd->captureAttr + 
+		//	CaptureAttr *cap = prg->rtd->captureAttr +
 		//			prg->rtd->lelInfo[kid->tree->id].captureAttr + i;
 		//
 		//	tree_t *attr = colm_get_attr( kid->tree, cap->offset );
@@ -1867,7 +3342,7 @@ void fillNodes( program_t *prg, int &nextAvail, struct bindings *bindings, long 
 
 		node.stop = parseTree->flags & PF_TERM_DUP;
 
-		node.child = child == 0 ? -1 : nextAvail++; 
+		node.child = child == 0 ? -1 : nextAvail++;
 
 		/* Recurse. */
 		fillNodes( prg, nextAvail, bindings, bindId, nodes, ptChild, child, node.child );
@@ -1883,7 +3358,7 @@ void fillNodes( program_t *prg, int &nextAvail, struct bindings *bindings, long 
 			//cout << "bindId: " << node.bindId << endl;
 		}
 
-		node.next = kid->next == 0 ? -1 : nextAvail++; 
+		node.next = kid->next == 0 ? -1 : nextAvail++;
 
 		/* Move to the next child. */
 		fillNodes( prg, nextAvail, bindings, bindId, nodes, parseTree->next, kid->next, node.next );
@@ -1899,17 +3374,17 @@ void Compiler::fillInPatterns( program_t *prg )
 	/* Count is referenced and computed by mapNode. */
 	int count = 0;
 	for ( PatList::Iter pat = patternList; pat.lte(); pat++ ) {
-		countNodes( prg, count, 
+		countNodes( prg, count,
 				pat->pdaRun->stack_top->next,
 				pat->pdaRun->stack_top->next->shadow );
 	}
 
 	for ( ConsList::Iter repl = replList; repl.lte(); repl++ ) {
-		countNodes( prg, count, 
+		countNodes( prg, count,
 				repl->pdaRun->stack_top->next,
 				repl->pdaRun->stack_top->next->shadow );
 	}
-	
+
 	runtimeData->pat_repl_nodes = new pat_cons_node[count];
 	runtimeData->num_pattern_nodes = count;
 
@@ -1920,15 +3395,15 @@ void Compiler::fillInPatterns( program_t *prg )
 		runtimeData->pat_repl_info[pat->patRepId].offset = ind;
 
 		/* BindIds are indexed base one. */
-		runtimeData->pat_repl_info[pat->patRepId].num_bindings = 
+		runtimeData->pat_repl_info[pat->patRepId].num_bindings =
 				pat->pdaRun->bindings->length() - 1;
 
 		/* Init the bind */
 		long bindId = 1;
 		fillNodes( prg, nextAvail, pat->pdaRun->bindings, bindId,
-				runtimeData->pat_repl_nodes, 
-				pat->pdaRun->stack_top->next, 
-				pat->pdaRun->stack_top->next->shadow, 
+				runtimeData->pat_repl_nodes,
+				pat->pdaRun->stack_top->next,
+				pat->pdaRun->stack_top->next->shadow,
 				ind );
 	}
 
@@ -1937,14 +3412,14 @@ void Compiler::fillInPatterns( program_t *prg )
 		runtimeData->pat_repl_info[repl->patRepId].offset = ind;
 
 		/* BindIds are indexed base one. */
-		runtimeData->pat_repl_info[repl->patRepId].num_bindings = 
+		runtimeData->pat_repl_info[repl->patRepId].num_bindings =
 				repl->pdaRun->bindings->length() - 1;
 
 		long bindId = 1;
 		fillNodes( prg, nextAvail, repl->pdaRun->bindings, bindId,
-				runtimeData->pat_repl_nodes, 
+				runtimeData->pat_repl_nodes,
 				repl->pdaRun->stack_top->next,
-				repl->pdaRun->stack_top->next->shadow, 
+				repl->pdaRun->stack_top->next->shadow,
 				ind );
 	}
 
@@ -2048,7 +3523,7 @@ struct pda_tables *Compiler::makePdaTables( PdaGraph *pdaGraph )
 	}
 
 	/* Allocate offsets. */
-	int numStates = pdaGraph->stateList.length(); 
+	int numStates = pdaGraph->stateList.length();
 	pdaTables->offsets = new unsigned int[numStates];
 	pdaTables->num_states = numStates;
 
@@ -2062,7 +3537,7 @@ struct pda_tables *Compiler::makePdaTables( PdaGraph *pdaGraph )
 	 * cost. Off for now. */
 	//MergeSort< PdaState*, CmpSpan > mergeSort;
 	//mergeSort.sort( states, numStates );
-	
+
 	int indLen = 0;
 	for ( int s = 0; s < numStates; s++ ) {
 		PdaState *state = states[s];
@@ -2088,7 +3563,7 @@ struct pda_tables *Compiler::makePdaTables( PdaGraph *pdaGraph )
 	/* We allocated the max, but cmpression gives us less. */
 	pdaTables->num_indices = indLen;
 	delete[] states;
-	
+
 
 	/*
 	 * Keys
@@ -2123,7 +3598,7 @@ struct pda_tables *Compiler::makePdaTables( PdaGraph *pdaGraph )
 	for ( PdaActionSet::Iter asi = pdaGraph->actionSet; asi.lte(); asi++ )
 		pdaTables->targs[count++] = asi->key.targ;
 
-	/* 
+	/*
 	 * ActInds
 	 */
 	count = pdaGraph->actionSet.length();
@@ -2164,7 +3639,7 @@ struct pda_tables *Compiler::makePdaTables( PdaGraph *pdaGraph )
 	count = 0;
 	for ( PdaActionSet::Iter asi = pdaGraph->actionSet; asi.lte(); asi++ )
 		pdaTables->commit_len[count++] = asi->key.commitLen;
-	
+
 	/*
 	 * tokenRegionInds. Start at one so region index 0 is null (unset).
 	 */
@@ -2217,7 +3692,7 @@ struct pda_tables *Compiler::makePdaTables( PdaGraph *pdaGraph )
 			assert( state->preRegions.length() <= 1 );
 			if ( state->preRegions.length() == 0 || state->preRegions[0]->impl->wasEmpty )
 				pdaTables->token_pre_regions[count++] = -1;
-			else 
+			else
 				pdaTables->token_pre_regions[count++] = state->preRegions[0]->id + 1;
 		}
 

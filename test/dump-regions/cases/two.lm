@@ -1,0 +1,25 @@
+# Two token regions, switched by the parser: a key region and a value
+# region. Used to exercise the run-time region-switch trace.
+lex
+	token key /[a-z]+/
+	literal `=
+	ignore /[ \t\n]+/
+end
+
+lex
+	token value /[^\n]+/
+	token nl /'\n'/
+end
+
+def setting
+	[key `= value nl]
+
+def settings
+	[setting*]
+
+parse Settings: settings[ stdin ]
+
+if ( Settings )
+	print("ok\n")
+else
+	print("fail\n")

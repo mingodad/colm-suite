@@ -1,0 +1,11 @@
+{
+  "rawShiftReduce": 1,
+  "rawReduceReduce": 0,
+  "remainingShiftReduce": 0,
+  "remainingReduceReduce": 0,
+  "conflicts": [
+    {"state": 6, "kind": "shift/reduce", "status": "resolved", "resolvedBy": "assoc", "actions": [{"type":"reduce","production":"exp","prodNum":0,"file":"assoc.lm","line":14}, {"type":"shift","target":5}], "runtimeFirst": null, "tokens": ["`+"]}
+  ],
+  "shapes": [
+  ]
+}

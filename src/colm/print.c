@@ -44,14 +44,14 @@ static void xml_escape_data( struct colm_print_args *print_args, const char *dat
 			print_args->out( print_args, "&gt;", 4 );
 		else if ( data[i] == '&' )
 			print_args->out( print_args, "&amp;", 5 );
-		else if ( (32 <= data[i] && data[i] <= 126) || 
+		else if ( (32 <= data[i] && data[i] <= 126) ||
 				data[i] == '\t' || data[i] == '\n' || data[i] == '\r' )
 		{
 			print_args->out( print_args, &data[i], 1 );
 		}
 		else {
 			char out[64];
-			sprintf( out, "&#%u;", ((unsigned)data[i]) );
+			snprintf( out, sizeof(out), "&#%u;", ((unsigned)data[i]) );
 			print_args->out( print_args, out, strlen(out) );
 		}
 	}
@@ -81,7 +81,7 @@ void str_collect_append( str_collect_t *collect, const char *data, long len )
 	memcpy( collect->data + collect->length, data, len );
 	collect->length += len;
 }
-		
+
 void str_collect_clear( str_collect_t *collect )
 {
 	collect->length = 0;
@@ -243,7 +243,7 @@ rec_call:
 		visit_type = Term;
 	else
 		visit_type = NonTerm;
-	
+
 	debug( prg, REALM_PRINT, "visit type: %d\n", visit_type );
 
 	if ( visit_type == IgnoreData ) {
@@ -350,8 +350,8 @@ rec_call:
 	}
 
 	/* Print children. */
-	kid_t *child = print_args->attr ? 
-		tree_attr( prg, kid->tree ) : 
+	kid_t *child = print_args->attr ?
+		tree_attr( prg, kid->tree ) :
 		tree_child( prg, kid->tree );
 
 	if ( child != 0 ) {
@@ -451,7 +451,7 @@ void colm_print_term_tree( program_t *prg, tree_t **sp,
 	if ( kid->tree->id == LEL_ID_PTR ) {
 		char buf[INT_SZ];
 		out_indent( args, "#<", 2 );
-		sprintf( buf, "%lx", ((pointer_t*)kid->tree)->value );
+		snprintf( buf, sizeof(buf), "%lx", ((pointer_t*)kid->tree)->value );
 		out_indent( args, buf, strlen(buf) );
 		out_indent( args, ">", 1 );
 	}
@@ -464,10 +464,10 @@ void colm_print_term_tree( program_t *prg, tree_t **sp,
 //		sprintf( buf, "%p", (void*) ((stream_t*)kid->tree)->in->file );
 //		printArgs->out( printArgs, buf, strlen(buf) );
 //	}
-	else if ( kid->tree->tokdata != 0 && 
+	else if ( kid->tree->tokdata != 0 &&
 			string_length( kid->tree->tokdata ) > 0 )
 	{
-		out_indent( args, string_data( kid->tree->tokdata ), 
+		out_indent( args, string_data( kid->tree->tokdata ),
 				string_length( kid->tree->tokdata ) );
 	}
 
@@ -553,7 +553,7 @@ static void xml_term( program_t *prg, tree_t **sp,
 	/*child = */ tree_child( prg, kid->tree );
 	if ( kid->tree->id == LEL_ID_PTR ) {
 		char ptr[INT_SZ];
-		sprintf( ptr, "%lx", ((pointer_t*)kid->tree)->value );
+		snprintf( ptr, sizeof(ptr), "%lx", ((pointer_t*)kid->tree)->value );
 		print_args->out( print_args, ptr, strlen(ptr) );
 	}
 	else if ( kid->tree->id == LEL_ID_STR ) {
@@ -563,10 +563,10 @@ static void xml_term( program_t *prg, tree_t **sp,
 	}
 	else if ( 0 < kid->tree->id && kid->tree->id < prg->rtd->first_non_term_id &&
 			kid->tree->id != LEL_ID_IGNORE &&
-			kid->tree->tokdata != 0 && 
+			kid->tree->tokdata != 0 &&
 			string_length( kid->tree->tokdata ) > 0 )
 	{
-		xml_escape_data( print_args, string_data( kid->tree->tokdata ), 
+		xml_escape_data( print_args, string_data( kid->tree->tokdata ),
 				string_length( kid->tree->tokdata ) );
 	}
 }
@@ -619,7 +619,7 @@ static void postfix_term_data( struct colm_print_args *args, const char *data, l
 			args->out( args, &data[i], 1 );
 		else {
 			char out[64];
-			sprintf( out, "\\%02x", ((unsigned char)data[i]) );
+			snprintf( out, sizeof(out), "\\%02x", ((unsigned char)data[i]) );
 			args->out( args, out, strlen(out) );
 		}
 	}
@@ -645,7 +645,7 @@ static void postfix_term( program_t *prg, tree_t **sp,
 	}
 	else if ( 0 < kid->tree->id && kid->tree->id < prg->rtd->first_non_term_id &&
 			kid->tree->id != LEL_ID_IGNORE //&&
-			//kid->tree->tokdata != 0 && 
+			//kid->tree->tokdata != 0 &&
 			//string_length( kid->tree->tokdata ) > 0 )
 			)
 	{
@@ -657,7 +657,7 @@ static void postfix_term( program_t *prg, tree_t **sp,
 		args->out( args, name, strlen( name ) );
 
 		/* id. */
-		sprintf( buf, " %d", kid->tree->id );
+		snprintf( buf, sizeof(buf), " %d", kid->tree->id );
 		args->out( args, buf, strlen( buf ) );
 
 		/* location. */
@@ -671,7 +671,7 @@ static void postfix_term( program_t *prg, tree_t **sp,
 				args->out( args, " 0 0 0 ", 7 );
 			}
 			else {
-				sprintf( buf, " %ld %ld %ld ", loc->line, loc->column, loc->byte );
+				snprintf( buf, sizeof(buf), " %ld %ld %ld ", loc->line, loc->column, loc->byte );
 				args->out( args, buf, strlen( buf ) );
 			}
 
@@ -703,11 +703,11 @@ static void postfix_close( program_t *prg, tree_t **sp,
 		args->out( args, name, strlen( name ) );
 
 		/* id. */
-		sprintf( buf, " %d", kid->tree->id );
+		snprintf( buf, sizeof(buf), " %d", kid->tree->id );
 		args->out( args, buf, strlen( buf ) );
 
 		/* Production number. */
-		sprintf( buf, " %d", kid->tree->prod_num );
+		snprintf( buf, sizeof(buf), " %d", kid->tree->prod_num );
 		args->out( args, buf, strlen( buf ) );
 
 		/* Child count. */
@@ -718,7 +718,7 @@ static void postfix_close( program_t *prg, tree_t **sp,
 			children += 1;
 		}
 
-		sprintf( buf, " %d", children );
+		snprintf( buf, sizeof(buf), " %d", children );
 		args->out( args, buf, strlen( buf ) );
 		args->out( args, "\n", 1 );
 	}
@@ -734,6 +734,22 @@ void colm_postfix_tree_collect( program_t *prg, tree_t **sp,
 
 	colm_print_tree_args( prg, sp, &print_args, tree );
 }
+
+#if 0
+void colm_postfix_tree_file( program_t *prg, tree_t **sp, struct stream_impl *impl,
+		tree_t *tree, int trim )
+{
+	struct colm_print_args print_args = {
+			impl, false, false, false, &append_file,
+			&postfix_open, &postfix_term, &postfix_close
+	};
+
+	colm_print_tree_args( prg, sp, &print_args, tree );
+
+	//struct stream_impl *impl = (struct stream_impl*) args->arg;
+	fflush( impl->file );
+}
+#endif
 
 void colm_print_tree_collect_xml( program_t *prg, tree_t **sp,
 		str_collect_t *collect, tree_t *tree, int trim )
@@ -755,5 +771,361 @@ void colm_print_tree_collect_xml_ac( program_t *prg, tree_t **sp,
 	};
 
 	colm_print_tree_args( prg, sp, &print_args, tree );
+}
+
+#define CST_MAX_DEPTH 1024
+
+struct cst_print_ctx {
+    str_collect_t *collect;
+    int depth;
+    int last[CST_MAX_DEPTH];
+};
+
+static void cst_out( struct colm_print_args *args,
+        const char *data, int length )
+{
+    struct cst_print_ctx *ctx = args->arg;
+    str_collect_append( ctx->collect, data, length );
+}
+
+static void cst_open( program_t *prg, tree_t **sp,
+        struct colm_print_args *args, kid_t *parent, kid_t *kid )
+{
+    struct cst_print_ctx *ctx = args->arg;
+    struct lang_el_info *lel_info = prg->rtd->lel_info;
+
+    /* Terminals are printed by cst_term(). */
+    if ( kid->tree->id < prg->rtd->first_non_term_id )
+        return;
+
+    /* Draw ancestor continuation prefixes. */
+    for ( int i = 0; i < ctx->depth; i++ ) {
+        const char *prefix = ctx->last[i] ? "   " : "│  ";
+        args->out( args, prefix, strlen(prefix) );
+    }
+
+    /* Draw a branch for every node except the root. */
+    if ( parent != 0 ) {
+        const char *branch = kid->next == 0 ? "└─ " : "├─ ";
+        args->out( args, branch, strlen(branch) );
+    }
+
+    const char *name = lel_info[kid->tree->id].name;
+    args->out( args, name, strlen(name) );
+
+    //char buf[128];
+    //snprintf( buf, sizeof(buf), " (prod=%d)", kid->tree->prod_num );
+    //args->out( args, buf, strlen(buf) );
+    args->out( args, "\n", 1 );
+
+    if ( ctx->depth < CST_MAX_DEPTH ) {
+        ctx->last[ctx->depth] = kid->next == 0;
+        ctx->depth++;
+    }
+}
+
+static void cst_term( program_t *prg, tree_t **sp,
+        struct colm_print_args *args, kid_t *kid )
+{
+    struct cst_print_ctx *ctx = args->arg;
+    struct lang_el_info *lel_info = prg->rtd->lel_info;
+
+    /* Draw ancestor continuation prefixes. */
+    for ( int i = 0; i < ctx->depth; i++ ) {
+        const char *prefix = ctx->last[i] ? "   " : "│  ";
+        args->out( args, prefix, strlen(prefix) );
+    }
+
+    /* Draw the terminal branch. */
+    const char *branch = kid->next == 0 ? "└─ " : "├─ ";
+    args->out( args, branch, strlen(branch) );
+
+    if ( kid->tree->id <= 0 ||
+            kid->tree->id >= prg->rtd->first_non_term_id ||
+            kid->tree->id == LEL_ID_IGNORE )
+        return;
+
+    for ( int i = 0; i < args->indent->level; i++ )
+        args->out( args, "   ", 3 );
+
+    const char *name = lel_info[kid->tree->id].name;
+    args->out( args, name, strlen(name) );
+    args->out( args, ": ", 2 );
+
+    if ( kid->tree->tokdata != 0 ) {
+        const char *data = string_data( kid->tree->tokdata );
+        int len = string_length( kid->tree->tokdata );
+        args->out( args, data, len );
+    }
+
+    args->out( args, "\n", 1 );
+}
+
+static void cst_close( program_t *prg, tree_t **sp,
+        struct colm_print_args *args, kid_t *parent, kid_t *kid )
+{
+    struct cst_print_ctx *ctx = args->arg;
+
+    if ( kid->tree->id < prg->rtd->first_non_term_id )
+        return;
+
+    if ( ctx->depth > 0 )
+        ctx->depth--;
+}
+
+void colm_cst_tree_collect( program_t *prg, tree_t **sp,
+        str_collect_t *collect, tree_t *tree, int trim )
+{
+    struct cst_print_ctx ctx = { .collect = collect };
+    struct indent_impl indent = { 0, 0 };
+
+    struct colm_print_args print_args = {
+        &ctx, false, false, trim, &indent,
+        &cst_out, &cst_open, &cst_term, &cst_close
+    };
+
+    colm_print_tree_args( prg, sp, &print_args, tree );
+}
+
+/* A deliberately self-contained CST printer. This is a draft alternative to
+ * colm_cst_tree_collect; it does not use the callback-based generic printer
+ * above. Ignore wrappers and attributes are omitted through tree_child(). */
+struct cst_simple_ctx {
+    program_t *prg;
+    str_collect_t *collect;
+    int last[CST_MAX_DEPTH];
+};
+
+static void cst_simple_append( str_collect_t *collect, const char *data )
+{
+    str_collect_append( collect, data, strlen( data ) );
+}
+
+static void cst_simple_prefix( struct cst_simple_ctx *ctx, int depth,
+        int is_last, int root )
+{
+    int i;
+    for ( i = 0; i < depth; i++ )
+        cst_simple_append( ctx->collect, ctx->last[i] ? "   " : "│  " );
+
+    if ( !root )
+        cst_simple_append( ctx->collect, is_last ? "└─ " : "├─ " );
+}
+
+static void cst_simple_node( struct cst_simple_ctx *ctx, tree_t *tree,
+        int depth, int is_last, int root )
+{
+    struct lang_el_info *lel_info = ctx->prg->rtd->lel_info;
+    kid_t *kid;
+    int child_depth;
+
+    if ( tree == 0 || tree->id <= 0 || tree->id == LEL_ID_IGNORE )
+        return;
+
+    if ( tree->id < ctx->prg->rtd->first_non_term_id ) {
+        cst_simple_prefix( ctx, depth, is_last, root );
+        cst_simple_append( ctx->collect, lel_info[tree->id].name );
+        cst_simple_append( ctx->collect, ": " );
+
+        if ( tree->tokdata != 0 )
+            str_collect_append( ctx->collect,
+                    string_data( tree->tokdata ),
+                    string_length( tree->tokdata ) );
+
+        cst_simple_append( ctx->collect, "\n" );
+        return;
+    }
+
+    cst_simple_prefix( ctx, depth, is_last, root );
+    cst_simple_append( ctx->collect, lel_info[tree->id].name );
+    cst_simple_append( ctx->collect, "\n" );
+
+    child_depth = depth;
+    if ( child_depth < CST_MAX_DEPTH ) {
+        ctx->last[child_depth] = is_last;
+        child_depth += 1;
+    }
+
+    kid = tree_child( ctx->prg, tree );
+    while ( kid != 0 ) {
+        cst_simple_node( ctx, kid->tree, child_depth,
+                kid->next == 0, false );
+        kid = kid->next;
+    }
+}
+
+void colm_cst_tree_collect_simple( program_t *prg, tree_t **sp,
+        str_collect_t *collect, tree_t *tree, int trim )
+{
+    struct cst_simple_ctx ctx;
+
+    (void)sp;
+    (void)trim;
+
+    ctx.prg = prg;
+    ctx.collect = collect;
+    memset( ctx.last, 0, sizeof(ctx.last) );
+    cst_simple_node( &ctx, tree, 0, true, true );
+}
+
+struct cst_filtered_ctx {
+    program_t *prg;
+    str_collect_t *collect;
+    const char * const *hidden_prefixes;
+    const char *show_list;
+    int last[CST_MAX_DEPTH];
+};
+
+/* Is name one of the comma-separated exact type names in list? */
+static bool cst_type_in_list( const char *name, const char *list )
+{
+    const char *p = list;
+    size_t name_len = strlen( name );
+
+    while ( *p != 0 ) {
+        const char *start = p;
+        size_t len;
+
+        while ( *p != 0 && *p != ',' ) p++;
+
+        while ( start < p && ( *start == ' ' || *start == '\t' ) ) start++;
+        len = p - start;
+        while ( len > 0 && ( start[len-1] == ' ' || start[len-1] == '\t' ) )
+            len--;
+
+        if ( len == name_len && strncmp( name, start, len ) == 0 )
+            return true;
+
+        if ( *p == ',' ) p++;
+    }
+
+    return false;
+}
+
+static bool cst_filtered_hidden( struct cst_filtered_ctx *ctx, tree_t *tree )
+{
+    struct lang_el_info *lel_info = ctx->prg->rtd->lel_info;
+    const char *name;
+    int i;
+
+    if ( tree == 0 || tree->id <= 0 || tree->id == LEL_ID_IGNORE )
+        return false;
+
+    name = lel_info[tree->id].name;
+    if ( name == 0 )
+        return false;
+
+    /* A show-list filters by exact name; anything not listed is elided. */
+    if ( ctx->show_list != 0 )
+        return !cst_type_in_list( name, ctx->show_list );
+
+    if ( tree->id < ctx->prg->rtd->first_non_term_id ||
+            ctx->hidden_prefixes == 0 )
+        return false;
+
+    for ( i = 0; ctx->hidden_prefixes[i] != 0; i++ ) {
+        size_t length = strlen( ctx->hidden_prefixes[i] );
+        if ( strncmp( name, ctx->hidden_prefixes[i], length ) == 0 )
+            return true;
+    }
+
+    return false;
+}
+
+static void cst_filtered_prefix( struct cst_filtered_ctx *ctx, int depth,
+        int is_last, int root )
+{
+    int i;
+    for ( i = 0; i < depth; i++ )
+        cst_simple_append( ctx->collect, ctx->last[i] ? "   " : "│  " );
+
+    if ( !root )
+        cst_simple_append( ctx->collect, is_last ? "└─ " : "├─ " );
+}
+
+static void cst_filtered_node( struct cst_filtered_ctx *ctx, tree_t *tree,
+        int depth, int is_last, int root )
+{
+    struct lang_el_info *lel_info = ctx->prg->rtd->lel_info;
+    kid_t *kid;
+    int child_depth;
+
+    if ( tree == 0 || tree->id <= 0 || tree->id == LEL_ID_IGNORE )
+        return;
+
+    if ( cst_filtered_hidden( ctx, tree ) ) {
+        kid = tree_child( ctx->prg, tree );
+        while ( kid != 0 ) {
+            cst_filtered_node( ctx, kid->tree, depth,
+                    kid->next == 0, root );
+            kid = kid->next;
+        }
+        return;
+    }
+
+    cst_filtered_prefix( ctx, depth, is_last, root );
+
+    if ( tree->id < ctx->prg->rtd->first_non_term_id ) {
+        cst_simple_append( ctx->collect, lel_info[tree->id].name );
+        cst_simple_append( ctx->collect, ": " );
+
+        if ( tree->tokdata != 0 )
+            str_collect_append( ctx->collect,
+                    string_data( tree->tokdata ),
+                    string_length( tree->tokdata ) );
+
+        cst_simple_append( ctx->collect, "\n" );
+        return;
+    }
+
+    cst_simple_append( ctx->collect, lel_info[tree->id].name );
+    cst_simple_append( ctx->collect, "\n" );
+
+    child_depth = depth;
+    if ( child_depth < CST_MAX_DEPTH ) {
+        ctx->last[child_depth] = is_last;
+        child_depth += 1;
+    }
+
+    kid = tree_child( ctx->prg, tree );
+    while ( kid != 0 ) {
+        cst_filtered_node( ctx, kid->tree, child_depth,
+                kid->next == 0, false );
+        kid = kid->next;
+    }
+}
+
+void colm_cst_tree_collect_simple_filtered( program_t *prg, tree_t **sp,
+        str_collect_t *collect, tree_t *tree, int trim,
+        const char * const *hidden_prefixes )
+{
+    struct cst_filtered_ctx ctx;
+
+    (void)sp;
+    (void)trim;
+
+    ctx.prg = prg;
+    ctx.collect = collect;
+    ctx.hidden_prefixes = hidden_prefixes;
+    ctx.show_list = 0;
+    memset( ctx.last, 0, sizeof(ctx.last) );
+    cst_filtered_node( &ctx, tree, 0, true, true );
+}
+
+void colm_cst_tree_collect_simple_show( program_t *prg, tree_t **sp,
+        str_collect_t *collect, tree_t *tree, int trim,
+        const char *show_list )
+{
+    struct cst_filtered_ctx ctx;
+
+    (void)sp;
+    (void)trim;
+
+    ctx.prg = prg;
+    ctx.collect = collect;
+    ctx.hidden_prefixes = 0;
+    ctx.show_list = show_list;
+    memset( ctx.last, 0, sizeof(ctx.last) );
+    cst_filtered_node( &ctx, tree, 0, true, true );
 }
 

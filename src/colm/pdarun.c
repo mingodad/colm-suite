@@ -73,6 +73,7 @@ static void init_fsm_run( program_t *prg, struct pda_run *pda_run )
 	pda_run->scan_eof = 0;
 
 	pda_run->pre_region = -1;
+	pda_run->region = -1;
 }
 
 static void clear_fsm_run( program_t *prg, struct pda_run *pda_run )
@@ -151,7 +152,7 @@ static void send_back_text( struct colm_program *prg, struct input_impl *is, con
 	if ( length == 0 )
 		return;
 
-	//debug( REALM_PARSE, "sending back text: %.*s\n", 
+	//debug( REALM_PARSE, "sending back text: %.*s\n",
 	//		(int)length, data );
 
 	is->funcs->undo_consume_data( prg, is, data, length );
@@ -172,7 +173,7 @@ static void send_back_ignore( program_t *prg, tree_t **sp,
 	#ifdef DEBUG
 	struct lang_el_info *lel_info = prg->rtd->lel_info;
 	debug( prg, REALM_PARSE, "sending back: %s%s\n",
-		lel_info[parse_tree->shadow->tree->id].name, 
+		lel_info[parse_tree->shadow->tree->id].name,
 		parse_tree->flags & PF_ARTIFICIAL ? " (artificial)" : "" );
 	#endif
 
@@ -253,7 +254,7 @@ static void send_back( program_t *prg, tree_t **sp, struct pda_run *pda_run,
 		}
 
 		/* Push back the token data. */
-		send_back_text( prg, is, colm_alph_from_cstr( string_data( parse_tree->shadow->tree->tokdata ) ), 
+		send_back_text( prg, is, colm_alph_from_cstr( string_data( parse_tree->shadow->tree->tokdata ) ),
 				string_length( parse_tree->shadow->tree->tokdata ) );
 
 		/* If eof was just sent back remember that it needs to be sent again. */
@@ -356,7 +357,7 @@ kid_t *make_token_with_data( program_t *prg, struct pda_run *pda_run,
 		int i;
 		for ( i = 0; i < lel_info[id].num_capture_attr; i++ ) {
 			CaptureAttr *ca = &prg->rtd->capture_attr[lel_info[id].capture_attr + i];
-			head_t *data = string_alloc_full( prg, 
+			head_t *data = string_alloc_full( prg,
 					colm_cstr_from_alph( pda_run->mark[ca->mark_enter]  ),
 					pda_run->mark[ca->mark_leave] -
 							pda_run->mark[ca->mark_enter] );
@@ -369,6 +370,71 @@ kid_t *make_token_with_data( program_t *prg, struct pda_run *pda_run,
 	return input;
 }
 
+static int append_expected_tokens(
+        program_t *prg, struct pda_run *pda_run,
+        char *buf, size_t buf_size)
+{
+    struct pda_tables *tables = pda_run->pda_tables;
+
+    if (buf == 0 || buf_size == 0 || tables == 0)
+        return 0;
+
+    buf[0] = '\0';
+
+    int state = pda_run->error_state;
+    if (state < 0 || state >= tables->num_states)
+        return 0;
+
+    int min_id = tables->keys[state << 1];
+    int max_id = tables->keys[(state << 1) + 1];
+
+    if (min_id < 0 ||
+            max_id < min_id ||
+            max_id >= prg->rtd->first_non_term_id)
+        return 0;
+
+    size_t used = 0;
+    int count = 0;
+
+    for (int token_id = min_id; token_id <= max_id; token_id++) {
+        unsigned int ind_pos = tables->offsets[state] +
+                (unsigned int)(token_id - min_id);
+
+        if (ind_pos >= (unsigned int)tables->num_indices)
+            continue;
+
+        if (tables->owners[ind_pos] != state)
+            continue;
+
+        int pos = tables->indices[ind_pos];
+        if (pos < 0)
+            continue;
+
+        const char *token_name =
+                prg->rtd->lel_info[token_id].name;
+
+        if (token_name == 0)
+            continue;
+
+        size_t remaining = buf_size - used;
+        int n = snprintf(buf + used, remaining, "%s%s",
+                count == 0 ? "" : ", ", token_name);
+
+        if (n < 0)
+            break;
+
+        if ((size_t)n >= remaining) {
+            buf[buf_size - 1] = '\0';
+            break;
+        }
+
+        used += (size_t)n;
+        count++;
+    }
+
+    return count;
+}
+
 static void report_parse_error( program_t *prg, tree_t **sp, struct pda_run *pda_run )
 {
 	kid_t *kid = pda_run->bt_point;
@@ -376,7 +442,7 @@ static void report_parse_error( program_t *prg, tree_t **sp, struct pda_run *pda
 	while ( kid != 0 ) {
 		head_t *head = kid->tree->tokdata;
 		if ( head != 0 && head->location != 0 ) {
-			if ( deepest == 0 || head->location->byte > deepest->location->byte ) 
+			if ( deepest == 0 || head->location->byte > deepest->location->byte )
 				deepest = head;
 		}
 		kid = kid->next;
@@ -384,48 +450,111 @@ static void report_parse_error( program_t *prg, tree_t **sp, struct pda_run *pda
 
 	head_t *error_head = 0;
 
-	/* If there are no error points on record assume the error occurred at the
-	 * beginning of the stream. */
-	if ( deepest == 0 )  {
-		const char *parse_error_string = "<input>:1:1: parse error";
-		error_head = string_alloc_full( prg, parse_error_string, strlen( parse_error_string ) );
-		error_head->location = location_allocate( prg );
-		error_head->location->line = 1;
-		error_head->location->column = 1;
-	}
-	else {
-		debug( prg, REALM_PARSE, "deepest location byte: %d\n",
-				deepest->location->byte );
+        /* Prefer the failure location recorded during parsing. */
+        if ( pda_run->has_error_location ) {
+            const char *name = pda_run->error_file;
+            if ( name == 0 )
+                name = "<input>";
+            const char *token_name = 0;
+            if ( pda_run->error_token_id >= 0 )
+                token_name = prg->rtd->lel_info[
+                        pda_run->error_token_id ].name;
 
-		const char *name = deepest->location->name;
-		long line = deepest->location->line;
-		long i, column = deepest->location->column;
-		long byte = deepest->location->byte;
+            if ( token_name == 0 )
+                token_name = "unknown token";
 
-		for ( i = 0; i < deepest->length; i++ ) {
-			if ( deepest->data[i] != '\n' )
-				column += 1;
-			else {
-				line += 1;
-				column = 1;
-			}
-			byte += 1;
-		}
+            char expected[1024];
+            int expected_count = append_expected_tokens(
+                    prg, pda_run, expected, sizeof(expected));
 
-		if ( name == 0 )
-			name = "<input>";
-		char *formatted = malloc( strlen( name ) + 128 );
-		sprintf( formatted, "%s:%ld:%ld: parse error", name, line, column );
-		error_head = string_alloc_full( prg, formatted, strlen(formatted) );
-		free( formatted );
+            size_t formatted_len = strlen(name) +
+                    strlen(token_name) + strlen(expected) + 160;
 
-		error_head->location = location_allocate( prg );
+            char *formatted = malloc(formatted_len);
+            if (formatted == 0)
+                abort();
 
-		error_head->location->name = deepest->location->name;
-		error_head->location->line = line;
-		error_head->location->column = column;
-		error_head->location->byte = byte;
-	}
+            if (expected_count > 0) {
+                snprintf(formatted, formatted_len,
+                        "%s:%ld:%ld: unexpected token %s; expected %s",
+                        name,
+                        pda_run->error_line,
+                        pda_run->error_column,
+                        token_name,
+                        expected);
+            }
+            else {
+                snprintf(formatted, formatted_len,
+                        "%s:%ld:%ld: unexpected token %s",
+                        name,
+                        pda_run->error_line,
+                        pda_run->error_column,
+                        token_name);
+            }
+
+            error_head = string_alloc_full(
+                    prg, formatted, strlen(formatted));
+            free(formatted);
+
+            error_head->location = location_allocate( prg );
+            error_head->location->name = pda_run->error_file;
+            error_head->location->line = pda_run->error_line;
+            error_head->location->column = pda_run->error_column;
+            error_head->location->byte = pda_run->error_byte;
+        }
+        /* Preserve the existing fallback if no failure was recorded. */
+        else if ( deepest == 0 ) {
+            const char *parse_error_string =
+                    "<input>:1:1: parse error";
+
+            error_head = string_alloc_full(
+                    prg, parse_error_string,
+                    strlen( parse_error_string ) );
+
+            error_head->location = location_allocate( prg );
+            error_head->location->line = 1;
+            error_head->location->column = 1;
+        }
+        /* Original deepest-token fallback. */
+        else {
+            debug( prg, REALM_PARSE, "deepest location byte: %d\n",
+                    deepest->location->byte );
+
+            const char *name = deepest->location->name;
+            long line = deepest->location->line;
+            long column = deepest->location->column;
+            long byte = deepest->location->byte;
+
+            for ( long i = 0; i < deepest->length; i++ ) {
+                if ( deepest->data[i] != '\n' )
+                    column += 1;
+                else {
+                    line += 1;
+                    column = 1;
+                }
+                byte += 1;
+            }
+
+            if ( name == 0 )
+                name = "<input>";
+
+            size_t formatted_len = strlen( name ) + 128;
+            char *formatted = malloc( formatted_len );
+
+            snprintf( formatted, formatted_len,
+                    "%s:%ld:%ld: parse error",
+                    name, line, column );
+
+            error_head = string_alloc_full(
+                    prg, formatted, strlen( formatted ) );
+            free( formatted );
+
+            error_head->location = location_allocate( prg );
+            error_head->location->name = deepest->location->name;
+            error_head->location->line = line;
+            error_head->location->column = column;
+            error_head->location->byte = byte;
+        }
 
 	tree_t *tree = construct_string( prg, error_head );
 	colm_tree_downref( prg, sp, pda_run->parse_error_text );
@@ -439,7 +568,7 @@ static void attach_right_ignore( program_t *prg, tree_t **sp,
 	if ( pda_run->accum_ignore == 0 )
 		return;
 
-	if ( pda_run->stack_top->id > 0 && 
+	if ( pda_run->stack_top->id > 0 &&
 			pda_run->stack_top->id < prg->rtd->first_non_term_id )
 	{
 		/* OK, do it */
@@ -690,8 +819,8 @@ static void detach_left_ignore( program_t *prg, tree_t **sp,
 
 static int is_parser_stop_finished( struct pda_run *pda_run )
 {
-	int done = 
-			pda_run->stack_top->next != 0 && 
+	int done =
+			pda_run->stack_top->next != 0 &&
 			pda_run->stack_top->next->next == 0 &&
 			pda_run->stack_top->id == pda_run->stop_target;
 	return done;
@@ -972,7 +1101,7 @@ static void send_token( program_t *prg, tree_t **sp,
 	parse_tree_t *parse_tree = parse_tree_allocate( pda_run );
 	parse_tree->id = input->tree->id;
 	parse_tree->shadow = input;
-		
+
 	pda_run->parse_input = parse_tree;
 
 	/* Store any alternate scanning region. */
@@ -992,7 +1121,7 @@ static void send_tree( program_t *prg, tree_t **sp, struct pda_run *pda_run,
 	parse_tree->id = input->tree->id;
 	parse_tree->flags |= PF_ARTIFICIAL;
 	parse_tree->shadow = input;
-	
+
 	pda_run->parse_input = parse_tree;
 }
 
@@ -1050,6 +1179,8 @@ static int get_next_pre_region( struct pda_run *pda_run )
 	return pda_run->pda_tables->token_pre_regions[pda_run->next_region_ind];
 }
 
+static const char *region_name( program_t *prg, int region );
+
 static void send_eof( program_t *prg, tree_t **sp, struct pda_run *pda_run,
 		struct input_impl *is )
 {
@@ -1069,15 +1200,31 @@ static void send_eof( program_t *prg, tree_t **sp, struct pda_run *pda_run,
 	input->tree->tokdata = head;
 
 	/* Set the state using the state of the parser. */
-	pda_run->region = get_next_region( pda_run, 0 );
+	{
+		int prev_region = pda_run->region;
+		pda_run->region = get_next_region( pda_run, 0 );
+		if ( prg->dump_parse && pda_run->region != prev_region ) {
+			fprintf( stderr, "parse: region %s -> %s (eof)\n",
+					region_name( prg, prev_region ),
+					region_name( prg, pda_run->region ) );
+		}
+	}
 	pda_run->pre_region = get_next_pre_region( pda_run );
 	pda_run->fsm_cs = pda_run->fsm_tables->entry_by_region[pda_run->region];
 
 	parse_tree_t *parse_tree = parse_tree_allocate( pda_run );
 	parse_tree->id = input->tree->id;
 	parse_tree->shadow = input;
-	
+
 	pda_run->parse_input = parse_tree;
+}
+
+static const char *region_name( program_t *prg, int region )
+{
+	if ( region < 0 || region >= prg->rtd->num_regions )
+		return "-";
+	const char *name = prg->rtd->region_info[region].name;
+	return name != 0 ? name : "?";
 }
 
 static void new_token( program_t *prg, struct pda_run *pda_run )
@@ -1093,7 +1240,15 @@ static void new_token( program_t *prg, struct pda_run *pda_run )
 	pda_run->matched_token = 0;
 
 	/* Set the state using the state of the parser. */
-	pda_run->region = get_next_region( pda_run, 0 );
+	{
+		int prev_region = pda_run->region;
+		pda_run->region = get_next_region( pda_run, 0 );
+		if ( prg->dump_parse && pda_run->region != prev_region ) {
+			fprintf( stderr, "parse: region %s -> %s\n",
+					region_name( prg, prev_region ),
+					region_name( prg, pda_run->region ) );
+		}
+	}
 	pda_run->pre_region = get_next_pre_region( pda_run );
 	if ( pda_run->pre_region > 0 ) {
 		pda_run->fsm_cs = pda_run->fsm_tables->entry_by_region[pda_run->pre_region];
@@ -1108,17 +1263,53 @@ static void new_token( program_t *prg, struct pda_run *pda_run )
 	memset( pda_run->mark, 0, sizeof(pda_run->mark) );
 }
 
+static void record_parse_failure(program_t *prg, struct pda_run *pda_run)
+{
+    parse_tree_t *lel = pda_run->lel;
+
+    if (lel == 0 || lel->shadow == 0 ||
+            lel->shadow->tree == 0)
+        return;
+
+    head_t *tokdata = lel->shadow->tree->tokdata;
+
+    if (tokdata == 0 || tokdata->location == 0)
+        return;
+
+    location_t *loc = tokdata->location;
+
+    if (!pda_run->has_error_location ||
+            loc->byte > pda_run->error_byte) {
+        pda_run->error_byte = loc->byte;
+        pda_run->error_line = loc->line;
+        pda_run->error_column = loc->column;
+        pda_run->error_token_id = lel->id;
+        pda_run->has_error_location = 1;
+        pda_run->error_state = pda_run->cur_state;
+        pda_run->error_file = loc->name;
+
+        if ( prg->dump_parse ) {
+            fprintf( stderr, "parse: deepest failure at %s:%ld:%ld "
+                    "in region %s (state %d)\n",
+                    loc->name != 0 ? loc->name : "<input>",
+                    loc->line, loc->column,
+                    region_name( prg, pda_run->region ),
+                    pda_run->error_state );
+        }
+    }
+}
+
 static void push_bt_point( program_t *prg, struct pda_run *pda_run )
 {
 	tree_t *tree = 0;
-	if ( pda_run->accum_ignore != 0 ) 
+	if ( pda_run->accum_ignore != 0 )
 		tree = pda_run->accum_ignore->shadow->tree;
 	else if ( pda_run->token_list != 0 )
 		tree = pda_run->token_list->kid->tree;
 
 	if ( tree != 0 ) {
-		debug( prg, REALM_PARSE, "pushing bt point with location byte %d\n", 
-				( tree != 0 && tree->tokdata != 0 && tree->tokdata->location != 0 ) ? 
+		debug( prg, REALM_PARSE, "pushing bt point with location byte %d\n",
+				( tree != 0 && tree->tokdata != 0 && tree->tokdata->location != 0 ) ?
 				tree->tokdata->location->byte : 0 );
 
 		kid_t *kid = kid_allocate( prg );
@@ -1137,6 +1328,52 @@ static void push_bt_point( program_t *prg, struct pda_run *pda_run )
 #define SCAN_ERROR             -3
 #define SCAN_LANG_EL           -2
 #define SCAN_EOF               -1
+
+static void dump_token( program_t *prg, struct pda_run *pda_run, long token, location_t *loc )
+{
+    struct lang_el_info *lel_info = prg->rtd->lel_info;
+	if( lel_info[token].ignore ) return;
+    const char *name = lel_info[token].name;
+    const char *regname = prg->rtd->region_info[pda_run->region].name;
+    const alph_t *begin = pda_run->tokstart;
+    const alph_t *end = pda_run->tokstart + pda_run->tokend;
+
+    fprintf( stderr, "%s:%ld:%ld:%ld:%ld:%s:%s  \"", loc->name,
+                loc->line, loc->column,
+		pda_run->fsm_cs, pda_run->region,
+		regname != 0 ? regname : "?",
+		name != 0 ? name : "<unknown>" );
+
+    for ( const alph_t *p = begin; p < end; p++ ) {
+        unsigned char c = (unsigned char)*p;
+
+        switch ( c ) {
+        case '\\':
+            fputs( "\\\\", stderr );
+            break;
+        case '"':
+            fputs( "\\\"", stderr );
+            break;
+        case '\n':
+            fputs( "\\n", stderr );
+            break;
+        case '\r':
+            fputs( "\\r", stderr );
+            break;
+        case '\t':
+            fputs( "\\t", stderr );
+            break;
+        default:
+            if ( c >= 32 && c < 127 )
+                fputc( c, stderr );
+            else
+                fprintf( stderr, "\\x%02x", c );
+            break;
+        }
+    }
+
+    fputs( "\"\n", stderr );
+}
 
 static long scan_token( program_t *prg, struct pda_run *pda_run, struct input_impl *is )
 {
@@ -1166,7 +1403,7 @@ static long scan_token( program_t *prg, struct pda_run *pda_run, struct input_im
 				pda_run->p = pda_run->pe = 0;
 				if ( pda_run->tokstart != 0 )
 					pda_run->scan_eof = 1;
-				else 
+				else
 					return SCAN_EOF;
 				break;
 
@@ -1177,14 +1414,14 @@ static long scan_token( program_t *prg, struct pda_run *pda_run, struct input_im
 			case INPUT_LANG_EL:
 				if ( pda_run->tokstart != 0 )
 					pda_run->scan_eof = 1;
-				else 
+				else
 					return SCAN_LANG_EL;
 				break;
 
 			case INPUT_TREE:
 				if ( pda_run->tokstart != 0 )
 					pda_run->scan_eof = 1;
-				else 
+				else
 					return SCAN_TREE;
 				break;
 			case INPUT_IGNORE:
@@ -1420,7 +1657,7 @@ static long stack_top_target( program_t *prg, struct pda_run *pda_run )
 	if ( pda_run->stack_top->state < 0 )
 		state = prg->rtd->start_states[pda_run->parser_id];
 	else {
-		unsigned shift = pda_run->stack_top->id - 
+		unsigned shift = pda_run->stack_top->id -
 				pda_run->pda_tables->keys[pda_run->stack_top->state<<1];
 		unsigned offset = pda_run->pda_tables->offsets[pda_run->stack_top->state] + shift;
 		int index = pda_run->pda_tables->indices[offset];
@@ -1457,7 +1694,7 @@ static long parse_token( program_t *prg, tree_t **sp,
 	if ( pda_run->parse_input == 0 )
 		goto parse_error;
 
-	/* This will cause parseInput to be lost. This 
+	/* This will cause parseInput to be lost. This
 	 * path should be traced. */
 	if ( pda_run->pda_cs < 0 )
 		return PCR_DONE;
@@ -1476,16 +1713,18 @@ again:
 			pda_run->lel->id > pda_run->pda_tables->keys[(pda_run->cur_state<<1)+1] )
 	{
 		debug( prg, REALM_PARSE, "parse error, no transition 1\n" );
+                record_parse_failure(prg, pda_run);
 		push_bt_point( prg, pda_run );
 		goto parse_error;
 	}
 
-	ind_pos = pda_run->pda_tables->offsets[pda_run->cur_state] + 
+	ind_pos = pda_run->pda_tables->offsets[pda_run->cur_state] +
 		(pda_run->lel->id - pda_run->pda_tables->keys[pda_run->cur_state<<1]);
 
 	owner = pda_run->pda_tables->owners[ind_pos];
 	if ( owner != pda_run->cur_state ) {
 		debug( prg, REALM_PARSE, "parse error, no transition 2\n" );
+                record_parse_failure(prg, pda_run);
 		push_bt_point( prg, pda_run );
 		goto parse_error;
 	}
@@ -1493,6 +1732,7 @@ again:
 	pos = pda_run->pda_tables->indices[ind_pos];
 	if ( pos < 0 ) {
 		debug( prg, REALM_PARSE, "parse error, no transition 3\n" );
+                record_parse_failure(prg, pda_run);
 		push_bt_point( prg, pda_run );
 		goto parse_error;
 	}
@@ -1510,7 +1750,7 @@ again:
 	 */
 
 	if ( *action & act_sb ) {
-		debug( prg, REALM_PARSE, "shifted: %s\n", 
+		debug( prg, REALM_PARSE, "shifted: %s\n",
 				prg->rtd->lel_info[pda_run->lel->id].name );
 		/* Consume. */
 		pda_run->parse_input = pda_run->parse_input->next;
@@ -1546,13 +1786,13 @@ again:
 			pda_run->lel->retry_lower += 1;
 			assert( pda_run->lel->retry_upper == 0 );
 			/* FIXME: Has the retry already been counted? */
-			pda_run->num_retry += 1; 
+			pda_run->num_retry += 1;
 		}
 
 		pda_run->shift_count += 1;
 	}
 
-	/* 
+	/*
 	 * Commit
 	 */
 
@@ -1566,7 +1806,7 @@ again:
 
 		if ( pda_run->fail_parsing )
 			goto fail;
-			
+
 	}
 
 	/*
@@ -1583,7 +1823,7 @@ again:
 		if ( !( *action & act_sb ) && pda_run->lel->id < prg->rtd->first_non_term_id )
 			attach_right_ignore( prg, sp, pda_run, pda_run->stack_top );
 
-		pda_run->reduction = *action >> 2;
+		pda_run->reduction = GET_SHIFT_REDUCE(*action);
 
 		if ( pda_run->parse_input != 0 )
 			pda_run->parse_input->cause_reduce += 1;
@@ -1757,7 +1997,7 @@ parse_error:
 
 			/* COROUTINE */
 			return PCR_REVERSE;
-			case PCR_REVERSE: 
+			case PCR_REVERSE:
 
 			colm_decrement_steps( pda_run );
 		}
@@ -1924,7 +2164,7 @@ parse_error:
 			pda_run->next = region > 0 ? region + 1 : 0;
 			pda_run->check_next = true;
 			pda_run->check_stop = true;
-			
+
 			send_back_ignore( prg, sp, pda_run, is, ignore );
 
 			colm_tree_downref( prg, sp, ignore->shadow->tree );
@@ -2020,10 +2260,11 @@ _out:
  *   PCR_REVERSE
  */
 
-long colm_parse_loop( program_t *prg, tree_t **sp, struct pda_run *pda_run, 
+long colm_parse_loop( program_t *prg, tree_t **sp, struct pda_run *pda_run,
 		struct input_impl *is, long entry )
 {
 	struct lang_el_info *lel_info = prg->rtd->lel_info;
+	location_t dump_loc = {};
 
 	/* COROUTINE */
 	switch ( entry ) {
@@ -2037,7 +2278,12 @@ long colm_parse_loop( program_t *prg, tree_t **sp, struct pda_run *pda_run,
 		/* Pull the current scanner from the parser. This can change during
 		 * parsing due to inputStream pushes, usually for the purpose of includes.
 		 * */
+		if ( prg->dump_lexer )
+			is->funcs->transfer_loc( prg, &dump_loc, is );
 		pda_run->token_id = scan_token( prg, pda_run, is );
+
+		if ( prg->dump_lexer && pda_run->token_id != SCAN_ERROR )
+        	dump_token( prg, pda_run, pda_run->matched_token, &dump_loc );
 
 		if ( pda_run->token_id == SCAN_ERROR ) {
 			if ( pda_run->pre_region >= 0 ) {
@@ -2102,6 +2348,17 @@ long colm_parse_loop( program_t *prg, tree_t **sp, struct pda_run *pda_run,
 			if ( pda_run->accum_ignore == 0 && get_next_region( pda_run, 1 ) != 0 ) {
 				debug( prg, REALM_PARSE, "scanner failed, trying next region\n" );
 
+				if ( prg->dump_parse ) {
+					location_t rloc = {};
+					is->funcs->transfer_loc( prg, &rloc, is );
+					fprintf( stderr, "parse: no match in region %s at "
+							"%s:%ld:%ld, trying %s\n",
+							region_name( prg, pda_run->region ),
+							rloc.name != 0 ? rloc.name : "<input>",
+							rloc.line, rloc.column,
+							region_name( prg, get_next_region( pda_run, 1 ) ) );
+				}
+
 				pda_run->next_region_ind += 1;
 				goto skip_send;
 			}
@@ -2147,7 +2404,7 @@ long colm_parse_loop( program_t *prg, tree_t **sp, struct pda_run *pda_run,
 		}
 		else if ( prg->ctx_dep_parsing && lel_info[pda_run->token_id].frame_id >= 0 ) {
 			/* Has a generation action. */
-			debug( prg, REALM_PARSE, "token gen action: %s\n", 
+			debug( prg, REALM_PARSE, "token gen action: %s\n",
 					prg->rtd->lel_info[pda_run->token_id].name );
 
 			/* Make the token data. */
@@ -2163,7 +2420,7 @@ long colm_parse_loop( program_t *prg, tree_t **sp, struct pda_run *pda_run,
 			pda_run->fi = &prg->rtd->frame_info[prg->rtd->lel_info[pda_run->token_id].frame_id];
 			pda_run->frame_id = prg->rtd->lel_info[pda_run->token_id].frame_id;
 			pda_run->code = pda_run->fi->codeWV;
-			
+
 			/* COROUTINE */
 			return PCR_GENERATION;
 			case PCR_GENERATION:
@@ -2176,7 +2433,7 @@ long colm_parse_loop( program_t *prg, tree_t **sp, struct pda_run *pda_run,
 			goto skip_send;
 		}
 		else if ( lel_info[pda_run->token_id].ignore ) {
-			debug( prg, REALM_PARSE, "sending an ignore token: %s\n", 
+			debug( prg, REALM_PARSE, "sending an ignore token: %s\n",
 					prg->rtd->lel_info[pda_run->token_id].name );
 
 			/* Is an ignore token. */
@@ -2184,7 +2441,7 @@ long colm_parse_loop( program_t *prg, tree_t **sp, struct pda_run *pda_run,
 			goto skip_send;
 		}
 		else {
-			debug( prg, REALM_PARSE, "sending a plain old token: %s\n", 
+			debug( prg, REALM_PARSE, "sending a plain old token: %s\n",
 					prg->rtd->lel_info[pda_run->token_id].name );
 
 			/* Is a plain token. */
@@ -2206,7 +2463,7 @@ yes:
 		}
 
 		long pcr = parse_token( prg, sp, pda_run, is, PCR_START );
-		
+
 		while ( pcr != PCR_DONE ) {
 
 			/* COROUTINE */
@@ -2261,6 +2518,22 @@ skip_send:
 		if ( pda_run->fail_parsing ) {
 			debug( prg, REALM_PARSE, "parsing failed by explicit request\n" );
 			break;
+		}
+	}
+
+	if ( prg->dump_cst && ( pda_run->eof_term_recvd ||
+			pda_run->stop_parsing || pda_run->stop ) ) {
+		tree_t *root = get_parsed_root( pda_run, pda_run->stop_target > 0 );
+		if ( root != 0 ) {
+			str_collect_t collect;
+			init_str_collect( &collect );
+			if ( prg->dump_cst_filter != 0 )
+				colm_cst_tree_collect_simple_show( prg, sp, &collect,
+						root, 0, prg->dump_cst_filter );
+			else
+				colm_cst_tree_collect_simple( prg, sp, &collect, root, 0 );
+			fprintf( stderr, "%s\n", collect.data );
+			str_collect_destroy( &collect );
 		}
 	}
 

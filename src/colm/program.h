@@ -150,6 +150,10 @@ struct colm_program
 	struct colm_struct *global;
 	int induce_exit;
 	int exit_status;
+	int dump_lexer;
+	int dump_parse;
+	int dump_cst;
+	const char *dump_cst_filter;
 
 	struct pool_alloc kid_pool;
 	struct pool_alloc tree_pool;

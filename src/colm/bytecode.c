@@ -44,7 +44,7 @@
 #define TRUE_VAL  1
 #define FALSE_VAL 0
 
-#if SIZEOF_LONG != 4 && SIZEOF_LONG != 8 
+#if SIZEOF_LONG != 4 && SIZEOF_LONG != 8
 	#error "SIZEOF_LONG contained an unexpected value"
 #endif
 
@@ -375,7 +375,7 @@ static long input_push( program_t *prg, tree_t **sp, struct input_impl *in, tree
 		/* This should become a compile error. If it's text, it's up to the
 		 * scanner to decide. Want to force it then send a token. */
 		assert( !ignore );
-			
+
 		/* Collect the tree data. */
 		str_collect_t collect;
 		init_str_collect( &collect );
@@ -515,7 +515,7 @@ static list_t *construct_argv( program_t *prg, int argc, const char **argv, cons
 		list_el_t *list_el = colm_struct_get_addr( strct, list_el_t*, 1 );
 		colm_list_append( list, list_el );
 	}
-	
+
 	return list;
 }
 
@@ -531,7 +531,7 @@ static list_t *construct_stds( program_t *prg )
 	colm_struct_set_field( strct, stream_t*, 0, prg->stdout_val );
 	list_el_t *list_el = colm_struct_get_addr( strct, list_el_t*, 1 );
 	colm_list_append( list, list_el );
-	
+
 	return list;
 }
 
@@ -633,14 +633,14 @@ void colm_execute( program_t *prg, execution_t *exec, code_t *code )
 
 	struct frame_info *fi = &prg->rtd->frame_info[prg->rtd->root_frame_id];
 
-	/* Set up the stack as if we have 
+	/* Set up the stack as if we have
 	 * called. We allow a return value. */
 
 	long stretch = FR_AA + fi->frame_size;
 	vm_contiguous( stretch );
 
 	vm_push_tree( 0 );
-	vm_push_tree( 0 ); 
+	vm_push_tree( 0 );
 	vm_push_tree( 0 );
 	vm_push_tree( 0 );
 	vm_push_tree( 0 );
@@ -704,7 +704,7 @@ tree_t *colm_run_func( struct colm_program *prg, int frame_id,
 
 	/* Set up the stack as if we have called. We allow a return value. */
 	vm_push_tree( (tree_t*)execution.call_args );
-	vm_push_tree( 0 ); 
+	vm_push_tree( 0 );
 	vm_push_tree( 0 );
 	vm_push_tree( 0 );
 	vm_push_tree( 0 );
@@ -722,7 +722,7 @@ tree_t *colm_run_func( struct colm_program *prg, int frame_id,
 	prg->return_val = execution.ret_val;
 
 	vm_popn( param_count );
-	
+
 	assert( sp == prg->stack_root );
 
 	return prg->return_val;
@@ -1736,7 +1736,7 @@ again:
 			break;
 		}
 		case IN_TREE_TO_STR_XML: {
-			debug( prg, REALM_BYTECODE, "IN_TREE_TO_STR_XML_AC\n" );
+			debug( prg, REALM_BYTECODE, "IN_TREE_TO_STR_XML\n" );
 
 			tree_t *tree = vm_pop_tree();
 			head_t *res = tree_to_str_xml( prg, sp, tree, false, false );
@@ -1758,7 +1758,7 @@ again:
 			break;
 		}
 		case IN_TREE_TO_STR_POSTFIX: {
-			debug( prg, REALM_BYTECODE, "IN_TREE_TO_STR_XML_AC\n" );
+			debug( prg, REALM_BYTECODE, "IN_TREE_TO_STR_POSTFIX\n" );
 
 			tree_t *tree = vm_pop_tree();
 			head_t *res = tree_to_str_postfix( prg, sp, tree, false, false );
@@ -1766,6 +1766,31 @@ again:
 			colm_tree_upref( prg, str );
 			vm_push_tree( str );
 			colm_tree_downref( prg, sp, tree );
+			break;
+		}
+		case IN_ANY_TYPE_NAME: {
+			debug( prg, REALM_BYTECODE, "IN_ANY_TYPE_NAME\n" );
+
+			tree_t *tree = vm_pop_tree();
+
+			const char *name;
+
+			if ( tree == 0 ) {
+				name = "";
+			}
+			else {
+				name = prg->rtd->lel_info[tree->id].name;
+			}
+
+			head_t *res = string_alloc_full( prg, name, strlen(name) );
+			tree_t *str = construct_string( prg, res );
+
+			colm_tree_upref( prg, str );
+			vm_push_tree( str );
+
+			if ( tree != 0 )
+				colm_tree_downref( prg, sp, tree );
+
 			break;
 		}
 		case IN_TREE_TO_STR: {
@@ -2052,7 +2077,7 @@ again:
 			vm_push_value( r );
 			break;
 		}
-		
+
 		case IN_NOT_VAL: {
 			debug( prg, REALM_BYTECODE, "IN_NOT_VAL\n" );
 
@@ -2179,7 +2204,7 @@ again:
 
 			tree_t **stack_root = vm_ptop();
 			long root_size = vm_ssize();
-			
+
 			int children = 0;
 			kid_t *kid = tree_child( prg, root_ref.kid->tree );
 			while ( kid != 0 ) {
@@ -2294,7 +2319,7 @@ again:
 			read_half( field );
 
 			debug( prg, REALM_BYTECODE, "IN_TRITER_GET_CUR_R\n" );
-			
+
 			tree_iter_t *iter = (tree_iter_t*) vm_get_plocal(exec, field);
 			tree_t *tree = tree_iter_deref_cur( iter );
 			colm_tree_upref( prg, tree );
@@ -2306,7 +2331,7 @@ again:
 			read_half( field );
 
 			debug( prg, REALM_BYTECODE, "IN_TRITER_GET_CUR_WC\n" );
-			
+
 			tree_iter_t *iter = (tree_iter_t*) vm_get_plocal(exec, field);
 			split_iter_cur( prg, &sp, iter );
 			tree_t *tree = tree_iter_deref_cur( iter );
@@ -2404,7 +2429,7 @@ again:
 			read_half( field );
 
 			debug( prg, REALM_BYTECODE, "IN_GEN_ITER_GET_CUR_R\n" );
-			
+
 			generic_iter_t *iter = (generic_iter_t*) vm_get_plocal(exec, field);
 			tree_t *tree = colm_list_iter_deref_cur( prg, iter );
 			//colm_tree_upref( prg, tree );
@@ -2416,7 +2441,7 @@ again:
 			read_half( field );
 
 			debug( prg, REALM_BYTECODE, "IN_GEN_VITER_GET_CUR_R\n" );
-			
+
 			generic_iter_t *iter = (generic_iter_t*) vm_get_plocal(exec, field);
 			value_t value = colm_viter_deref_cur( prg, iter );
 			vm_push_value( value );
@@ -2493,7 +2518,7 @@ again:
 				auto_trim = true;
 			else if ( trim == TRIM_NO )
 				auto_trim = false;
-			else 
+			else
 				auto_trim = si->funcs->get_option( prg, si, 0 );
 
 			si->funcs->print_tree( prg, sp, si, to_send, auto_trim );
@@ -2518,7 +2543,7 @@ again:
 				auto_trim = true;
 			else if ( trim == TRIM_NO )
 				auto_trim = false;
-			else 
+			else
 				auto_trim = si->funcs->get_option( prg, si, 0 );
 
 			word_t len = stream_append_text( prg, sp, parser->input, to_send, auto_trim );
@@ -2574,7 +2599,7 @@ again:
 				auto_trim = true;
 			else if ( trim == TRIM_NO )
 				auto_trim = false;
-			else 
+			else
 				auto_trim = si->funcs->get_option( prg, si, 0 );
 
 			if ( auto_trim )
@@ -3447,7 +3472,7 @@ again:
 			read_half( gen_id );
 			read_half( field );
 
-			debug( prg, REALM_BYTECODE, 
+			debug( prg, REALM_BYTECODE,
 					"IN_GET_LIST_MEM_R %hd %hd\n", gen_id, field );
 
 			list_t *list = vm_pop_list();
@@ -3506,7 +3531,7 @@ again:
 			read_half( gen_id );
 			read_half( field );
 
-			debug( prg, REALM_BYTECODE, 
+			debug( prg, REALM_BYTECODE,
 					"IN_GET_VLIST_MEM_R %hd %hd\n", gen_id, field );
 
 			list_t *list = vm_pop_list();
@@ -3611,7 +3636,7 @@ again:
 			read_half( gen_id );
 			read_half( field );
 
-			debug( prg, REALM_BYTECODE, 
+			debug( prg, REALM_BYTECODE,
 					"IN_GET_MAP_MEM_R %hd %hd\n", gen_id, field );
 
 			map_t *map = vm_pop_map();
@@ -3775,7 +3800,7 @@ again:
 			user_iter_t *uiter = (user_iter_t*) vm_plocal_iframe( IFR_AA );
 
 			if ( kid == 0 || kid->tree == 0 ||
-					kid->tree->id == uiter->search_id || 
+					kid->tree->id == uiter->search_id ||
 					uiter->search_id == prg->rtd->any_id )
 			{
 				/* Store the yielded value. */
@@ -3927,7 +3952,7 @@ again:
 							"skipping unwind code length: %hd\n", unwind_len );
 				}
 			}
-				
+
 			break;
 		}
 		case IN_TO_UPPER: {
@@ -4462,7 +4487,7 @@ again:
 
 				map_t *map = vm_pop_map();
 
-				if ( inserted ) 
+				if ( inserted )
 					colm_map_detach( prg, map, map_el );
 				break;
 			}
@@ -4574,7 +4599,7 @@ again:
 
 				map_t *map = vm_pop_map();
 
-				if ( inserted ) 
+				if ( inserted )
 					colm_map_detach( prg, map, map_el );
 				break;
 			}
@@ -4653,7 +4678,7 @@ again:
 				tree_t *key = vm_pop_tree();
 
 				tree_t *result = colm_vmap_find( prg, map, key );
-	
+
 				vm_push_tree( result );
 
 				if ( map->generic_info->key_type == TYPE_TREE )
@@ -5010,7 +5035,7 @@ again:
 			read_tree( input );
 			consume_word(); //( len );
 
-			debug( prg, REALM_BYTECODE, "IN_SEND_TEXT_BKT\n" ); 
+			debug( prg, REALM_BYTECODE, "IN_SEND_TEXT_BKT\n" );
 
 			colm_tree_downref( prg, sp, input );
 			break;
@@ -5022,7 +5047,7 @@ again:
 			read_tree( input );
 			consume_word(); //( len );
 
-			debug( prg, REALM_BYTECODE, "IN_SEND_TREE_BKT\n" ); 
+			debug( prg, REALM_BYTECODE, "IN_SEND_TREE_BKT\n" );
 
 			colm_tree_downref( prg, sp, input );
 			break;
