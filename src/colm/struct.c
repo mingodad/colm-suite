@@ -74,10 +74,9 @@ static struct struct_el_info *colm_sel_info( program_t *prg, int id )
 
 void colm_struct_delete( program_t *prg, tree_t **sp, struct colm_struct *el )
 {
-	//fprintf( stderr, "DEL id=%d (nlel=%ld fstruct=%ld nstruct=%ld)\n",
-	//	el->id, prg->rtd->num_lang_els, prg->rtd->first_struct_el_id,
-	//	prg->rtd->num_struct_els );fflush(stderr);
-	if ( el->id == prg->rtd->struct_inbuilt_id || el->id == prg->rtd->struct_stream_id ) {
+	if ( el->id == prg->rtd->struct_inbuilt_id ||
+			el->id == prg->rtd->struct_input_id ||
+			el->id == prg->rtd->struct_stream_id ) {
 		colm_destructor_t destructor = ((struct colm_inbuilt*)el)->destructor;
 		if ( destructor != 0 )
 			(*destructor)( prg, sp, el );
